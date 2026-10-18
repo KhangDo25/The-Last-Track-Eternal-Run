@@ -1,0 +1,74 @@
+@import "tailwindcss";
+
+@keyframes rainStreak {
+  0% {
+    transform: translate3d(0, -100%, 0);
+    opacity: 0;
+  }
+  15% {
+    opacity: 0.55;
+  }
+  85% {
+    opacity: 0.55;
+  }
+  100% {
+    transform: translate3d(-30px, 120%, 0);
+    opacity: 0;
+  }
+}
+
+@keyframes frostBreath {
+  0%, 100% {
+    opacity: 0.65;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.95;
+    transform: scale(1.02);
+  }
+}
+
+@keyframes waterDrip {
+  0% {
+    transform: translateY(-20px) scaleY(1);
+    opacity: 0;
+  }
+  20% {
+    opacity: 0.7;
+  }
+  75% {
+    transform: translateY(90px) scaleY(1.4);
+    opacity: 0.5;
+  }
+  100% {
+    transform: translateY(160px) scaleY(0.8);
+    opacity: 0;
+  }
+}
+
+.animate-rain-streak-1 {
+  animation: rainStreak 0.75s linear infinite;
+}
+.animate-rain-streak-2 {
+  animation: rainStreak 0.95s linear infinite 0.25s;
+}
+.animate-rain-streak-3 {
+  animation: rainStreak 0.65s linear infinite 0.45s;
+}
+.animate-rain-streak-4 {
+  animation: rainStreak 0.85s linear infinite 0.15s;
+}
+
+.animate-frost-breath {
+  animation: frostBreath 6s ease-in-out infinite;
+}
+
+.animate-water-drip-1 {
+  animation: waterDrip 3.2s ease-in infinite 0.3s;
+}
+.animate-water-drip-2 {
+  animation: waterDrip 4.1s ease-in infinite 1.4s;
+}
+.animate-water-drip-3 {
+  animation: waterDrip 3.7s ease-in infinite 2.2s;
+}

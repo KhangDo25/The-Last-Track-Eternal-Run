@@ -1,0 +1,6 @@
+{
+  "name": "The Last Track: Eternal Run",
+  "description": "First-person post-apocalyptic train base-building survival game and Unity 6 development architecture workbench.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
