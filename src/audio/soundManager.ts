@@ -4,21 +4,79 @@ class SoundManager {
   private engineOsc: OscillatorNode | null = null;
   private clatterTimer: number | null = null;
   private isMuted: boolean = false;
+  private masterVolume: number = 0.8;
+  private musicVolume: number = 0.75;
+  private sfxVolume: number = 0.9;
+  private masterGain: GainNode | null = null;
+  private musicGain: GainNode | null = null;
+  private sfxGain: GainNode | null = null;
 
   private initContext() {
     if (!this.ctx) {
       const AudioCtx = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
       this.ctx = new AudioCtx();
+
+      this.masterGain = this.ctx.createGain();
+      this.masterGain.gain.setValueAtTime(this.isMuted ? 0 : this.masterVolume, this.ctx.currentTime);
+      this.masterGain.connect(this.ctx.destination);
+
+      this.musicGain = this.ctx.createGain();
+      this.musicGain.gain.setValueAtTime(this.musicVolume, this.ctx.currentTime);
+      this.musicGain.connect(this.masterGain);
+
+      this.sfxGain = this.ctx.createGain();
+      this.sfxGain.gain.setValueAtTime(this.sfxVolume, this.ctx.currentTime);
+      this.sfxGain.connect(this.masterGain);
     }
     if (this.ctx.state === 'suspended') {
       this.ctx.resume();
     }
   }
 
+  public setMasterVolume(pct: number) {
+    this.masterVolume = Math.max(0, Math.min(1, pct / 100));
+    this.initContext();
+    if (this.masterGain && this.ctx) {
+      this.masterGain.gain.setValueAtTime(this.isMuted ? 0 : this.masterVolume, this.ctx.currentTime);
+    }
+  }
+
+  public setMusicVolume(pct: number) {
+    this.musicVolume = Math.max(0, Math.min(1, pct / 100));
+    this.initContext();
+    if (this.musicGain && this.ctx) {
+      this.musicGain.gain.setValueAtTime(this.musicVolume, this.ctx.currentTime);
+    }
+  }
+
+  public setSfxVolume(pct: number) {
+    this.sfxVolume = Math.max(0, Math.min(1, pct / 100));
+    this.initContext();
+    if (this.sfxGain && this.ctx) {
+      this.sfxGain.gain.setValueAtTime(this.sfxVolume, this.ctx.currentTime);
+    }
+  }
+
+  public pauseAudio() {
+    if (this.engineGain && this.ctx) {
+      this.engineGain.gain.setTargetAtTime(0, this.ctx.currentTime, 0.05);
+    }
+  }
+
+  public resumeAudio() {
+    if (this.engineGain && this.ctx && !this.isMuted) {
+      this.engineGain.gain.setTargetAtTime(0.15 * this.musicVolume, this.ctx.currentTime, 0.1);
+    }
+  }
+
   public setMuted(muted: boolean) {
     this.isMuted = muted;
+    this.initContext();
+    if (this.masterGain && this.ctx) {
+      this.masterGain.gain.setValueAtTime(muted ? 0 : this.masterVolume, this.ctx.currentTime);
+    }
     if (this.engineGain) {
-      this.engineGain.gain.value = muted ? 0 : 0.15;
+      this.engineGain.gain.value = muted ? 0 : 0.15 * this.musicVolume;
     }
   }
 
@@ -46,11 +104,11 @@ class SoundManager {
       filter.type = 'lowpass';
       filter.frequency.setValueAtTime(140, this.ctx.currentTime);
 
-      gain.gain.setValueAtTime(this.isMuted ? 0 : 0.15, this.ctx.currentTime);
+      gain.gain.setValueAtTime(this.isMuted ? 0 : 0.15 * this.musicVolume, this.ctx.currentTime);
 
       osc.connect(filter);
       filter.connect(gain);
-      gain.connect(this.ctx.destination);
+      gain.connect(this.musicGain || this.ctx.destination);
 
       osc.start();
       this.engineOsc = osc;

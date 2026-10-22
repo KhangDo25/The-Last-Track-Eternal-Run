@@ -21,7 +21,10 @@ import {
   MapPin,
   AlertCircle,
   ShieldAlert,
-  Construction,
+  CheckCircle2,
+  Pause,
+  Save,
+  Settings,
 } from 'lucide-react';
 import { Language, TRANSLATIONS } from '../i18n/translations';
 
@@ -80,6 +83,9 @@ interface GameHUDProps {
   language: Language;
   currentWeather?: WeatherType;
   onToggleWeather?: () => void;
+  onOpenPause?: () => void;
+  onOpenSave?: () => void;
+  onOpenSettings?: () => void;
 }
 
 export const GameHUD: React.FC<GameHUDProps> = ({
@@ -90,6 +96,9 @@ export const GameHUD: React.FC<GameHUDProps> = ({
   language,
   currentWeather = 'blizzard',
   onToggleWeather,
+  onOpenPause,
+  onOpenSave,
+  onOpenSettings,
 }) => {
   const t = TRANSLATIONS[language];
   const p = engine.playerStats;
@@ -434,6 +443,191 @@ export const GameHUD: React.FC<GameHUDProps> = ({
 
         {/* Center: Weather Cycle Visual Timeline & Active Environmental Debuffs */}
         <div className="flex flex-col items-center gap-2 max-w-xl flex-1">
+          {/* Phase 1: Prologue Quest Tracker Card */}
+          {engine.prologue.isActive && (
+            <div className="bg-zinc-950/95 backdrop-blur-md border-2 border-amber-500/80 p-3.5 rounded-2xl shadow-[0_0_25px_rgba(245,158,11,0.3)] w-full text-zinc-100 pointer-events-auto select-none">
+              <div className="flex items-center justify-between border-b border-zinc-800 pb-2 mb-2.5">
+                <div className="flex items-center gap-2">
+                  <div className="w-2.5 h-2.5 rounded-full bg-amber-400 animate-ping" />
+                  <span className="text-[11px] font-black tracking-wider uppercase text-amber-300 font-mono">
+                    {language === 'vi' ? 'GIAI ĐOẠN 1: KHỞI HÀNH CUỐI CÙNG' : 'PHASE 1: THE LAST DEPARTURE'}
+                  </span>
+                </div>
+                <span className="text-[9px] px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/40 font-bold">
+                  {engine.prologue.step === 'intro_cutscene' && (language === 'vi' ? 'MỞ ĐẦU' : 'PROLOGUE')}
+                  {engine.prologue.step === 'radio_message' && (language === 'vi' ? 'TÍN HIỆU RADIO' : 'RADIO SIGNAL')}
+                  {engine.prologue.step === 'scavenge_resources' && (language === 'vi' ? 'THU GOM TÀI NGUYÊN' : 'SCAVENGE')}
+                  {engine.prologue.step === 'repair_engine' && (language === 'vi' ? 'BẢO TRÌ ĐẦU MÁY' : 'REPAIR ENGINE')}
+                  {engine.prologue.step === 'raider_ambush' && (language === 'vi' ? 'PHÒNG THỦ TÀU' : 'DEFEND TRAIN')}
+                  {engine.prologue.step === 'depart_to_settlement' && (language === 'vi' ? 'ĐẾN TIỀN ĐỒN' : 'TO HAVEN')}
+                  {engine.prologue.step === 'prologue_complete' && (language === 'vi' ? 'HOÀN THÀNH' : 'COMPLETED')}
+                </span>
+              </div>
+
+              {/* Active Step Content */}
+              <div className="space-y-2 text-xs">
+                {engine.prologue.step === 'intro_cutscene' && (
+                  <div className="flex items-center justify-between">
+                    <span className="text-zinc-300">
+                      {language === 'vi'
+                        ? 'Tỉnh dậy tại Kho ga phế tích Sector 07. Tiếp cận radio cũ.'
+                        : 'Awaken in Ruined Depot #07. Inspect the emergency radio.'}
+                    </span>
+                    <button
+                      onClick={() => engine.advancePrologueCutscene()}
+                      className="px-2.5 py-1 bg-amber-500 hover:bg-amber-400 text-zinc-950 font-bold text-[10px] rounded-lg transition-colors cursor-pointer shrink-0"
+                    >
+                      {language === 'vi' ? 'Đọc Ghi Chú' : 'Read Note'}
+                    </button>
+                  </div>
+                )}
+
+                {engine.prologue.step === 'radio_message' && (
+                  <div className="flex items-center justify-between">
+                    <span className="text-zinc-300 flex items-center gap-1.5">
+                      <Radio className="w-3.5 h-3.5 text-cyan-400 animate-pulse shrink-0" />
+                      {language === 'vi'
+                        ? 'Bật đài radio khẩn cấp trên sân ga để nghe thông điệp Terminal Zero [E]'
+                        : 'Turn on emergency radio on the platform to hear Terminal Zero broadcast [E]'}
+                    </span>
+                    <button
+                      onClick={() => engine.readRadioTransmission()}
+                      className="px-2.5 py-1 bg-cyan-500 hover:bg-cyan-400 text-zinc-950 font-bold text-[10px] rounded-lg transition-colors cursor-pointer shrink-0"
+                    >
+                      {language === 'vi' ? 'Nghe Radio' : 'Tune Radio'}
+                    </button>
+                  </div>
+                )}
+
+                {engine.prologue.step === 'scavenge_resources' && (
+                  <div className="space-y-2">
+                    <div className="text-[11px] text-zinc-300">
+                      {language === 'vi'
+                        ? 'Mục tiêu: Thu gom nhiên liệu và phế liệu tại các thùng hàng trên sân ga:'
+                        : 'Objective: Scavenge fuel and scrap metal from depot caches:'}
+                    </div>
+                    <div className="grid grid-cols-2 gap-2 text-[10px]">
+                      <div className="p-2 bg-zinc-900/80 rounded-xl border border-zinc-800 flex items-center justify-between">
+                        <span className="flex items-center gap-1.5 text-blue-300">
+                          <Flame className="w-3.5 h-3.5 text-blue-400" />
+                          {language === 'vi' ? 'Nhiên Liệu (+25L)' : 'Fuel Canister (+25L)'}
+                        </span>
+                        <span className={`font-bold tabular-nums ${engine.prologue.fuelCollected >= 1 ? 'text-emerald-400' : 'text-amber-400'}`}>
+                          {engine.prologue.fuelCollected} / {engine.prologue.fuelTarget}
+                        </span>
+                      </div>
+                      <div className="p-2 bg-zinc-900/80 rounded-xl border border-zinc-800 flex items-center justify-between">
+                        <span className="flex items-center gap-1.5 text-amber-300">
+                          <Box className="w-3.5 h-3.5 text-amber-400" />
+                          {language === 'vi' ? 'Phế Liệu Kim Loại' : 'Scrap Metal'}
+                        </span>
+                        <span className={`font-bold tabular-nums ${engine.prologue.scrapCollected >= 15 ? 'text-emerald-400' : 'text-amber-400'}`}>
+                          {engine.prologue.scrapCollected} / {engine.prologue.scrapTarget}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {engine.prologue.step === 'repair_engine' && (
+                  <div className="flex items-center justify-between">
+                    <span className="text-zinc-200 flex items-center gap-1.5">
+                      <Wrench className="w-4 h-4 text-cyan-400 animate-spin shrink-0" />
+                      {language === 'vi'
+                        ? 'Đến cạnh thân đầu máy, nhấn [E] để hàn kín ống hơi bị nứt vỡ'
+                        : 'Approach the locomotive boiler, press [E] to weld fractured steam pipe'}
+                    </span>
+                    <button
+                      onClick={() => engine.repairLocomotiveEngine()}
+                      className="px-3 py-1.5 bg-cyan-500 hover:bg-cyan-400 text-zinc-950 font-bold text-[10px] rounded-lg transition-colors cursor-pointer shrink-0"
+                    >
+                      {language === 'vi' ? 'Hàn Ống Hơi [E]' : 'Weld Pipe [E]'}
+                    </button>
+                  </div>
+                )}
+
+                {engine.prologue.step === 'raider_ambush' && (
+                  <div className="space-y-1.5">
+                    <div className="flex items-center justify-between">
+                      <span className="text-red-400 font-bold flex items-center gap-1.5 animate-pulse">
+                        <ShieldAlert className="w-4 h-4 text-red-500" />
+                        {language === 'vi'
+                          ? 'Bọn cướp phế liệu tấn công! Tiêu diệt kẻ địch bảo vệ đoàn tàu!'
+                          : 'Rust Scavenger Ambush! Defend the train!'}
+                      </span>
+                      <span className="text-red-300 font-bold tabular-nums">
+                        {engine.prologue.raidersDefeated} / {engine.prologue.raidersTarget} {language === 'vi' ? 'đã hạ' : 'down'}
+                      </span>
+                    </div>
+                    <div className="w-full bg-zinc-900 h-2 rounded-full overflow-hidden border border-zinc-800">
+                      <div
+                        className="bg-red-500 h-full rounded-full transition-all duration-300"
+                        style={{ width: `${(engine.prologue.raidersDefeated / engine.prologue.raidersTarget) * 100}%` }}
+                      />
+                    </div>
+                    <div className="text-[10px] text-zinc-400 flex justify-between">
+                      <span>{language === 'vi' ? 'Nhấn chuột trái để bắn hoặc leo tháp súng toa hành khách' : 'Click left mouse to fire or mount passenger defense mount'}</span>
+                      <span className="text-amber-300 font-bold">[Chuột Trái]</span>
+                    </div>
+                  </div>
+                )}
+
+                {engine.prologue.step === 'depart_to_settlement' && (
+                  <div className="space-y-1.5">
+                    <div className="flex items-center justify-between">
+                      <span className="text-emerald-400 font-bold flex items-center gap-1.5">
+                        <MapPin className="w-4 h-4 text-emerald-400" />
+                        {language === 'vi'
+                          ? 'Tiến vào cabin kéo cần ga hướng về Tiền Đồn Haven:'
+                          : 'Throttle up and drive to Haven Outpost:'}
+                      </span>
+                      <span className="text-emerald-300 font-extrabold tabular-nums">
+                        {engine.prologue.settlementDistanceKm.toFixed(1)} km {language === 'vi' ? 'còn lại' : 'left'}
+                      </span>
+                    </div>
+                    <div className="w-full bg-zinc-900 h-2 rounded-full overflow-hidden border border-zinc-800">
+                      <div
+                        className="bg-emerald-500 h-full rounded-full transition-all duration-300"
+                        style={{
+                          width: `${Math.min(
+                            100,
+                            Math.max(0, (1 - engine.prologue.settlementDistanceKm / engine.prologue.settlementTargetKm) * 100)
+                          )}%`,
+                        }}
+                      />
+                    </div>
+                    <div className="text-[10px] text-zinc-400 flex justify-between">
+                      <span>{language === 'vi' ? 'Cần ga: ' + ts.throttle + '% · Tốc độ: ' + Math.round(ts.currentSpeed) + ' km/h' : 'Throttle: ' + ts.throttle + '% · Speed: ' + Math.round(ts.currentSpeed) + ' km/h'}</span>
+                      <button
+                        onClick={() => engine.setThrottle(50)}
+                        className="text-amber-300 hover:text-white font-bold underline cursor-pointer"
+                      >
+                        {ts.currentSpeed === 0 ? (language === 'vi' ? 'Kéo ga 50%' : 'Set 50% Throttle') : ''}
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {engine.prologue.step === 'prologue_complete' && (
+                  <div className="flex items-center justify-between">
+                    <span className="text-emerald-300 font-bold flex items-center gap-1.5">
+                      <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                      {language === 'vi'
+                        ? 'Đã đến Tiền Đồn Haven an toàn! Hoàn thành Giai đoạn 1.'
+                        : 'Arrived at Haven Outpost safely! Phase 1 Complete.'}
+                    </span>
+                    <button
+                      onClick={() => engine.completePrologue()}
+                      className="px-3 py-1.5 bg-emerald-500 hover:bg-emerald-400 text-zinc-950 font-extrabold text-[10px] rounded-lg transition-colors cursor-pointer shrink-0"
+                    >
+                      {language === 'vi' ? 'Mở Khóa Toàn Bộ' : 'Unlock Full Game'}
+                    </button>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
           {/* Station Departure Countdown Banner if at Outpost Depot */}
           {station && (
             <div className="bg-red-950/90 backdrop-blur-md border-2 border-red-600/90 px-8 py-2 rounded-2xl shadow-[0_0_35px_rgba(239,68,68,0.5)] text-center animate-pulse w-full">
@@ -656,7 +850,43 @@ export const GameHUD: React.FC<GameHUDProps> = ({
         </div>
 
         {/* Right Column: Tactical Radar, Track Condition Warning System & Train Metrics */}
-        <div className="flex flex-col gap-3 shrink-0 items-end">
+        <div className="flex flex-col gap-2.5 shrink-0 items-end">
+          {/* Quick HUD Navigation & Action Bar */}
+          <div className="flex items-center gap-1.5 pointer-events-auto">
+            {onOpenPause && (
+              <button
+                onClick={onOpenPause}
+                className="flex items-center gap-1.5 px-3 py-1 bg-zinc-950/90 hover:bg-zinc-900 border border-zinc-800 hover:border-amber-500/50 text-amber-400 rounded-xl text-[10px] font-bold shadow-lg transition-colors cursor-pointer"
+                title={language === 'vi' ? 'Tạm Dừng Trò Chơi [ESC / P]' : 'Pause Expedition [ESC / P]'}
+              >
+                <Pause className="w-3.5 h-3.5" />
+                <span>{language === 'vi' ? 'Tạm Dừng [ESC]' : 'Pause [ESC]'}</span>
+              </button>
+            )}
+
+            {onOpenSave && (
+              <button
+                onClick={onOpenSave}
+                className="flex items-center gap-1.5 px-3 py-1 bg-zinc-950/90 hover:bg-zinc-900 border border-zinc-800 hover:border-emerald-500/50 text-emerald-400 rounded-xl text-[10px] font-bold shadow-lg transition-colors cursor-pointer"
+                title={language === 'vi' ? 'Lưu Tiến Trình [F5]' : 'Save Progress [F5]'}
+              >
+                <Save className="w-3.5 h-3.5" />
+                <span>{language === 'vi' ? 'Lưu' : 'Save'}</span>
+              </button>
+            )}
+
+            {onOpenSettings && (
+              <button
+                onClick={onOpenSettings}
+                className="flex items-center gap-1.5 px-3 py-1 bg-zinc-950/90 hover:bg-zinc-900 border border-zinc-800 hover:border-cyan-500/50 text-cyan-400 rounded-xl text-[10px] font-bold shadow-lg transition-colors cursor-pointer"
+                title={language === 'vi' ? 'Cài Đặt Hệ Thống' : 'System Settings'}
+              >
+                <Settings className="w-3.5 h-3.5" />
+                <span>{language === 'vi' ? 'Cài Đặt' : 'Settings'}</span>
+              </button>
+            )}
+          </div>
+
           {/* Tactical Radar & Track Condition Warning Container */}
           <div className="flex items-start gap-2.5">
             {/* Track Condition Warning Card / Icon System */}
@@ -1277,6 +1507,137 @@ export const GameHUD: React.FC<GameHUDProps> = ({
           <span><kbd className="text-zinc-200 font-bold">[F1]</kbd> {t.debugHint}</span>
         </div>
       </div>
+      {/* PROLOGUE STORY & DIALOGUE MODAL */}
+      {engine.prologue.isActive && engine.prologue.dialogueOpen && (
+        <div className="fixed inset-0 z-50 bg-zinc-950/85 backdrop-blur-md flex items-center justify-center p-4 pointer-events-auto">
+          <div className="bg-zinc-900 border-2 border-amber-500/80 rounded-2xl max-w-xl w-full p-6 shadow-[0_0_40px_rgba(245,158,11,0.35)] text-zinc-100 font-mono space-y-4 animate-in fade-in zoom-in-95 duration-200">
+            {/* Header / Speaker Info */}
+            <div className="flex items-center gap-3 border-b border-zinc-800 pb-3">
+              <div className="w-12 h-12 rounded-xl bg-amber-500/20 border border-amber-500/40 flex items-center justify-center shrink-0">
+                {engine.prologue.step === 'radio_message' ? (
+                  <Radio className="w-6 h-6 text-cyan-400 animate-pulse" />
+                ) : engine.prologue.step === 'prologue_complete' ? (
+                  <MapPin className="w-6 h-6 text-emerald-400 animate-bounce" />
+                ) : (
+                  <Wrench className="w-6 h-6 text-amber-400" />
+                )}
+              </div>
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] text-amber-400 font-bold tracking-widest uppercase block">
+                    {engine.prologue.step === 'radio_message'
+                      ? (language === 'vi' ? 'TẦN SỐ KHẨN CẤP 104.2 MHZ' : 'EMERGENCY FREQ 104.2 MHZ')
+                      : engine.prologue.step === 'prologue_complete'
+                      ? (language === 'vi' ? 'TIỀN ĐỒN HAVEN · KM 2.5' : 'HAVEN OUTPOST · KM 2.5')
+                      : (language === 'vi' ? 'ELIAS VOSS · CỰU KỸ SƯ BẢO TRÌ' : 'ELIAS VOSS · RAILWAY ENGINEER')}
+                  </span>
+                  <span className="text-[9px] px-2 py-0.5 rounded bg-zinc-800 text-zinc-400">
+                    {language === 'vi' ? 'CHƯƠNG MỞ ĐẦU' : 'PROLOGUE'}
+                  </span>
+                </div>
+                <h3 className="text-base font-extrabold text-zinc-100 truncate">
+                  {engine.prologue.step === 'radio_message'
+                    ? (language === 'vi' ? 'Bản Tin Phát Thanh: Bí Ẩn Terminal Zero' : 'Radio Broadcast: Mystery of Terminal Zero')
+                    : engine.prologue.step === 'prologue_complete'
+                    ? (language === 'vi' ? 'Hoàn Thành Giai Đoạn 1: Đến Tiền Đồn Haven' : 'Phase 1 Complete: Reached Haven Outpost')
+                    : (language === 'vi' ? 'Tỉnh Lại Giữa Đống Phế Tích Ga Xe Lửa' : 'Awakening in the Ruined Railway Depot')}
+                </h3>
+              </div>
+            </div>
+
+            {/* Narrative Story Text */}
+            <div className="bg-zinc-950/70 p-4 rounded-xl border border-zinc-800 text-xs text-zinc-300 leading-relaxed max-h-60 overflow-y-auto space-y-2">
+              {engine.prologue.step === 'intro_cutscene' && (
+                <>
+                  <p>
+                    {language === 'vi'
+                      ? 'Nhiều năm sau Đại Sụp Đổ do thí nghiệm năng lượng Eternal Core thất bại phá hủy nền văn minh, thế giới đã trở thành vùng đất chết hoang tàn ngập trong bão tuyết.'
+                      : 'Several years after the Great Collapse, when a failed energy experiment destroyed civilization, the continent lies frozen in ruins.'}
+                  </p>
+                  <p>
+                    {language === 'vi'
+                      ? 'Elias Voss, cựu kỹ sư bảo trì đường sắt, tỉnh dậy trong kho ga hoang phế Sector 07. Bên cạnh là một đầu máy Shunter #04 cũ kỹ bị nứt vỡ ống hơi và đúng một toa hành khách hạng B đơn sơ.'
+                      : 'Elias Voss, a former railway maintenance engineer, awakens in the abandoned Sector 07 freight depot. Beside him stands a barely functioning locomotive with a fractured steam pipe and exactly one ordinary passenger carriage.'}
+                  </p>
+                  <p className="text-amber-300 font-semibold">
+                    {language === 'vi'
+                      ? 'Nhiên liệu còn rất ít, công cụ thô sơ. Mục tiêu trước mắt: tìm kiếm nhiên liệu, phế liệu và sửa chữa đầu máy để sinh tồn.'
+                      : 'With limited fuel, basic tools, and very few supplies, his immediate objective is to scavenge resources and survive.'}
+                  </p>
+                </>
+              )}
+
+              {engine.prologue.step === 'radio_message' && (
+                <>
+                  <p className="text-cyan-300 italic font-mono">
+                    {language === 'vi'
+                      ? '...Tạp âm radio rè rè kéo dài... "Gửi bất kỳ ai còn sống sót... Terminal Zero vẫn còn hoạt động. Ga đường sắt trung tâm cuối cùng chưa sụp đổ. Hãy tiếp tục di chuyển trên đường ray... Tuyến phía Bắc là hy vọng duy nhất..."'
+                      : '...Static hums across the frequency... "...Calling all survivors... Terminal Zero is still broadcasting. The last functioning railway terminal has not fallen. Keep moving on the line... The northbound line is our only hope..."'}
+                  </p>
+                  <p>
+                    {language === 'vi'
+                      ? 'Chiếc radio bóng đèn cũ kỹ chập chờn rồi tắt ngấm. Terminal Zero thực sự có thật? Manh mối duy nhất để sống sót là sửa chữa đầu máy và hướng về tiền đồn người sống sót gần nhất!'
+                      : 'The old vacuum-tube radio fades into static. Terminal Zero is real? The only way to survive is to repair the locomotive and reach the nearby survivor settlement!'}
+                  </p>
+                </>
+              )}
+
+              {engine.prologue.step === 'prologue_complete' && (
+                <>
+                  <p className="text-emerald-300 font-bold">
+                    {language === 'vi'
+                      ? 'Ánh đèn pha rực sáng từ cổng tiền đồn kiên cố xuyên qua bão tuyết: "Đoàn tàu sắt đã đến! Mở cổng chắn ray!"'
+                      : 'High-beam searchlights from the fortified outpost pierce the blizzard: "The iron locomotive has arrived! Open the gates!"'}
+                  </p>
+                  <p>
+                    {language === 'vi'
+                      ? 'Bạn đã đưa đầu máy Shunter #04 và toa hành khách vượt qua 2.5 km vùng đất hoang an toàn, đẩy lùi đợt phục kích của bọn cướp.'
+                      : 'You successfully piloted the locomotive and passenger carriage across 2.5 km of frozen wasteland, surviving the raider ambush.'}
+                  </p>
+                  <p>
+                    {language === 'vi'
+                      ? 'Người sống sót tại Tiền Đồn Haven tiếp tế phế liệu, mở khóa xưởng nâng cấp toa tàu, tháp pháo và khoang chứa hàng. Hành trình dài hướng về Terminal Zero chính thức bắt đầu!'
+                      : 'The survivors at Haven provide supplies, unlocking full train upgrades, weapon defense carriages, and cargo expansion. The long journey to Terminal Zero begins!'}
+                  </p>
+                </>
+              )}
+            </div>
+
+            {/* Actions */}
+            <div className="flex justify-end pt-1">
+              {engine.prologue.step === 'intro_cutscene' && (
+                <button
+                  onClick={() => engine.advancePrologueCutscene()}
+                  className="px-5 py-2.5 bg-amber-500 hover:bg-amber-400 text-zinc-950 font-extrabold text-xs uppercase tracking-wider rounded-xl transition-all shadow-[0_0_20px_rgba(245,158,11,0.4)] flex items-center gap-2 cursor-pointer"
+                >
+                  <span>{language === 'vi' ? 'Khám Phá Kho Ga & Nghe Đài' : 'Inspect Depot & Tune Radio'}</span>
+                  <ChevronRight className="w-4 h-4" />
+                </button>
+              )}
+
+              {engine.prologue.step === 'radio_message' && (
+                <button
+                  onClick={() => engine.readRadioTransmission()}
+                  className="px-5 py-2.5 bg-cyan-500 hover:bg-cyan-400 text-zinc-950 font-extrabold text-xs uppercase tracking-wider rounded-xl transition-all shadow-[0_0_20px_rgba(6,182,212,0.4)] flex items-center gap-2 cursor-pointer"
+                >
+                  <span>{language === 'vi' ? 'Tiếp Nhận & Bắt Đầu Tìm Tài Nguyên' : 'Acknowledge & Begin Scavenging'}</span>
+                  <ChevronRight className="w-4 h-4" />
+                </button>
+              )}
+
+              {engine.prologue.step === 'prologue_complete' && (
+                <button
+                  onClick={() => engine.completePrologue()}
+                  className="px-5 py-2.5 bg-emerald-500 hover:bg-emerald-400 text-zinc-950 font-extrabold text-xs uppercase tracking-wider rounded-xl transition-all shadow-[0_0_20px_rgba(16,185,129,0.4)] flex items-center gap-2 cursor-pointer"
+                >
+                  <span>{language === 'vi' ? 'Bước Vào Giai Đoạn 2: Hành Trình Bất Tận' : 'Enter Next Phase: Eternal Run'}</span>
+                  <ChevronRight className="w-4 h-4" />
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

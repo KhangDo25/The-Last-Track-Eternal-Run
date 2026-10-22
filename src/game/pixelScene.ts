@@ -2,9 +2,11 @@ import * as THREE from 'three';
 import { soundManager } from '../audio/soundManager';
 import { EnemyEntity, TurretState } from '../types/game';
 import { Language, TRANSLATIONS } from '../i18n/translations';
+import { GameEngine } from './gameEngine';
+import { SettingsManager } from '../utils/settingsManager';
 
 export interface InteractionTarget {
-  type: 'Throttle' | 'Brake' | 'Turret' | 'Workbench' | 'Storage' | 'Loot' | 'Horn';
+  type: 'Throttle' | 'Brake' | 'Turret' | 'Workbench' | 'Storage' | 'Loot' | 'Horn' | 'Radio' | 'Repair';
   id?: string;
   name: string;
   position: THREE.Vector3;
@@ -87,6 +89,27 @@ export class GameScene {
   public isPointerLocked = false;
   public currentInteractable: InteractionTarget | null = null;
 
+  // Engine reference
+  public engine: GameEngine | null = null;
+  public pixelArtScaling: 'pixelated' | 'smooth' = 'pixelated';
+  public screenShakeEnabled: boolean = true;
+
+  public setEngine(engine: GameEngine) {
+    this.engine = engine;
+  }
+
+  public applySettings(settings: { pixelArtScaling?: 'pixelated' | 'smooth'; screenShake?: boolean }) {
+    if (settings.pixelArtScaling !== undefined) {
+      this.pixelArtScaling = settings.pixelArtScaling;
+      this.ctx.imageSmoothingEnabled = settings.pixelArtScaling === 'smooth';
+      this.canvas.style.imageRendering = settings.pixelArtScaling === 'pixelated' ? 'pixelated' : 'auto';
+    }
+    if (settings.screenShake !== undefined) {
+      this.screenShakeEnabled = settings.screenShake;
+      if (!settings.screenShake) this.screenShake = 0;
+    }
+  }
+
   // Callbacks
   public onLootAction?: (crateId: string) => void;
   public onOpenUI?: (uiType: 'Throttle' | 'Workbench' | 'Storage') => void;
@@ -129,8 +152,11 @@ export class GameScene {
   private nextTrackCreak = 0;
   private nextWindGust = 0;
 
-  constructor(container: HTMLElement) {
+  constructor(container: HTMLElement, engine?: GameEngine) {
     this.container = container;
+    if (engine) {
+      this.engine = engine;
+    }
 
     // Create Canvas with crisp pixel art settings
     this.canvas = document.createElement('canvas');
@@ -629,6 +655,139 @@ export class GameScene {
       ctx.arc(45, 60, 18, 0, Math.PI * 2);
       ctx.fill();
     });
+
+    // 13. PASSENGER CARRIAGE (Class-B Ordinary Passenger Carriage #108)
+    this.spriteCache['carriage_passenger'] = makeSprite(68, 110, (ctx) => {
+      // Base dark wooden & iron coach body
+      ctx.fillStyle = '#1c1917';
+      ctx.fillRect(10, 6, 48, 98);
+      ctx.fillStyle = '#3e2723'; // rich weathered mahogany wood
+      ctx.fillRect(12, 10, 44, 90);
+
+      // Wooden horizontal siding planks
+      ctx.fillStyle = '#2d1810';
+      for (let y = 14; y < 96; y += 6) {
+        ctx.fillRect(12, y, 44, 1);
+      }
+
+      // Steel vertical framing & corner brackets
+      ctx.fillStyle = '#52525b';
+      ctx.fillRect(10, 10, 3, 90);
+      ctx.fillRect(55, 10, 3, 90);
+      ctx.fillRect(33, 10, 2, 90); // center pillar
+
+      // Window rows (6 passenger windows with warm amber/gold lantern glow from inside)
+      const windowY = [18, 38, 58, 78];
+      windowY.forEach((wy) => {
+        // Left passenger window
+        ctx.fillStyle = '#f59e0b';
+        ctx.fillRect(16, wy, 12, 12);
+        // Window mullion / cross frame
+        ctx.fillStyle = '#2d1810';
+        ctx.fillRect(21, wy, 2, 12);
+        ctx.fillRect(16, wy + 5, 12, 2);
+        // Interior seat silhouette
+        ctx.fillStyle = '#451a03';
+        ctx.fillRect(17, wy + 7, 4, 4);
+
+        // Right passenger window
+        ctx.fillStyle = '#f59e0b';
+        ctx.fillRect(40, wy, 12, 12);
+        ctx.fillStyle = '#2d1810';
+        ctx.fillRect(45, wy, 2, 12);
+        ctx.fillRect(40, wy + 5, 12, 2);
+        ctx.fillStyle = '#451a03';
+        ctx.fillRect(47, wy + 7, 4, 4);
+      });
+
+      // Clerestory vaulted roof with ventilation louvers
+      ctx.fillStyle = '#27272a';
+      ctx.fillRect(14, 6, 40, 6);
+      ctx.fillStyle = '#3f3f46';
+      ctx.fillRect(16, 4, 36, 4);
+
+      // Woodstove chimney stovepipe (emitting slight warmth)
+      ctx.fillStyle = '#09090b';
+      ctx.fillRect(20, 0, 4, 6);
+      ctx.fillStyle = '#b45309'; // soot
+      ctx.fillRect(19, 0, 6, 2);
+
+      // Front & rear observation platform iron railings
+      ctx.fillStyle = '#71717a';
+      ctx.fillRect(12, 8, 44, 2);
+      ctx.fillRect(12, 98, 44, 2);
+    });
+
+    // 14. DEPOT EMERGENCY TUBE RADIO
+    this.spriteCache['depot_radio'] = makeSprite(36, 36, (ctx) => {
+      ctx.fillStyle = '#1e293b';
+      ctx.fillRect(4, 8, 28, 24);
+      ctx.strokeStyle = '#0f172a';
+      ctx.lineWidth = 2;
+      ctx.strokeRect(4, 8, 28, 24);
+      // Glowing green-cyan frequency dial
+      ctx.fillStyle = '#06b6d4';
+      ctx.fillRect(8, 12, 20, 8);
+      ctx.fillStyle = '#22d3ee';
+      ctx.fillRect(16, 12, 2, 8); // tuning needle
+      // Speaker grille
+      ctx.fillStyle = '#334155';
+      ctx.fillRect(8, 22, 14, 8);
+      // Volume & tuning knobs
+      ctx.fillStyle = '#f59e0b';
+      ctx.beginPath();
+      ctx.arc(26, 24, 3, 0, Math.PI * 2);
+      ctx.fill();
+      // Telescoping whip antenna
+      ctx.fillStyle = '#94a3b8';
+      ctx.fillRect(6, 0, 2, 8);
+      ctx.fillStyle = '#ef4444';
+      ctx.fillRect(5, 0, 4, 2);
+    });
+
+    // 15. DEPOT FUEL BARREL CACHE
+    this.spriteCache['depot_fuel_barrel'] = makeSprite(36, 36, (ctx) => {
+      ctx.fillStyle = '#1d4ed8';
+      ctx.fillRect(8, 8, 20, 24);
+      ctx.fillStyle = '#2563eb';
+      ctx.fillRect(10, 10, 16, 20);
+      // Stencil flame logo
+      ctx.fillStyle = '#f59e0b';
+      ctx.fillRect(16, 16, 4, 8);
+      ctx.fillRect(14, 18, 8, 4);
+      // Siphon hose
+      ctx.strokeStyle = '#0f172a';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(14, 8);
+      ctx.lineTo(14, 4);
+      ctx.lineTo(26, 4);
+      ctx.stroke();
+    });
+
+    // 16. DEPOT SCRAP PILE
+    this.spriteCache['depot_scrap_pile'] = makeSprite(40, 36, (ctx) => {
+      ctx.fillStyle = '#78350f';
+      ctx.fillRect(6, 16, 28, 14);
+      ctx.fillStyle = '#92400e';
+      ctx.fillRect(10, 12, 20, 12);
+      ctx.fillStyle = '#52525b';
+      ctx.fillRect(14, 8, 12, 8);
+      ctx.fillStyle = '#f59e0b';
+      ctx.fillRect(8, 20, 6, 6);
+      ctx.fillRect(26, 14, 8, 5);
+    });
+
+    // 17. DEPOT REPAIR WRENCH ICON
+    this.spriteCache['depot_repair_wrench'] = makeSprite(32, 32, (ctx) => {
+      ctx.fillStyle = '#38bdf8';
+      ctx.beginPath();
+      ctx.arc(16, 16, 12, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = '#0f172a';
+      ctx.fillRect(14, 6, 4, 16);
+      ctx.fillRect(10, 8, 12, 4);
+    });
   }
 
   // Populate background decor and stars
@@ -690,8 +849,12 @@ export class GameScene {
 
   private onKeyDown = (e: KeyboardEvent) => {
     this.keys[e.code] = true;
-    if (e.code === 'KeyE') {
+    const controls = SettingsManager.getSettings().controls;
+    if (e.code === 'KeyE' || e.code === controls.interact) {
       this.handleInteract();
+    } else if (e.code === 'KeyH' || e.code === controls.horn) {
+      soundManager.playHorn();
+      this.screenShake = 6;
     } else if (e.code === 'KeyT') {
       this.toggleWeather();
     }
@@ -706,26 +869,67 @@ export class GameScene {
     soundManager.playClick();
     const type = this.currentInteractable.type;
 
-    if (type === 'Turret') {
+    if (type === 'Radio') {
+      if (this.engine) {
+        this.engine.readRadioTransmission();
+      }
+    } else if (type === 'Repair') {
+      if (this.engine) {
+        this.engine.repairLocomotiveEngine();
+        this.damageNumbers.push({
+          x: this.canvas.width / 2 - 20,
+          y: this.canvas.height / 2 - 120,
+          text: '+STEAM PRESSURE RESTORED!',
+          color: '#38bdf8',
+          life: 2.0,
+          maxLife: 2.0,
+        });
+        // Welding sparks
+        for (let i = 0; i < 30; i++) {
+          this.particles.push({
+            x: this.canvas.width / 2 - 24 + (Math.random() - 0.5) * 16,
+            y: this.canvas.height / 2 - 120 + (Math.random() - 0.5) * 16,
+            vx: (Math.random() - 0.5) * 220,
+            vy: -40 - Math.random() * 160,
+            life: 0.5,
+            maxLife: 0.5,
+            color: Math.random() > 0.5 ? '#38bdf8' : '#fef08a',
+            size: 2,
+            type: 'spark',
+            gravity: 300,
+          });
+        }
+      }
+    } else if (type === 'Turret') {
       this.isMountedToTurret = !this.isMountedToTurret;
     } else if (type === 'Throttle' || type === 'Workbench' || type === 'Storage') {
       if (this.onOpenUI) {
         this.onOpenUI(type);
       }
     } else if (type === 'Loot' && this.currentInteractable.id) {
-      if (this.onLootAction) {
+      if (this.currentInteractable.id.startsWith('crate_prologue_') && this.engine) {
+        this.engine.scavengePrologueCrate(this.currentInteractable.id);
+        const isFuel = this.currentInteractable.id === 'crate_prologue_fuel';
+        this.damageNumbers.push({
+          x: this.canvas.width / 2 + 100,
+          y: this.canvas.height / 2,
+          text: isFuel ? '+25L SYNTHETIC FUEL' : '+15 SCRAP METAL',
+          color: isFuel ? '#38bdf8' : '#f59e0b',
+          life: 1.8,
+          maxLife: 1.8,
+        });
+      } else if (this.onLootAction) {
         this.onLootAction(this.currentInteractable.id);
+        this.damageNumbers.push({
+          x: this.canvas.width / 2 + 100,
+          y: this.canvas.height / 2,
+          text: '+RESOURCES LOOTED!',
+          color: '#22c55e',
+          life: 1.5,
+          maxLife: 1.5,
+        });
+        soundManager.playLootSound();
       }
-      // Floating text pickup
-      this.damageNumbers.push({
-        x: this.canvas.width / 2 + 100,
-        y: this.canvas.height / 2,
-        text: '+RESOURCES LOOTED!',
-        color: '#22c55e',
-        life: 1.5,
-        maxLife: 1.5,
-      });
-      soundManager.playLootSound();
     } else if (type === 'Horn') {
       soundManager.playHorn();
       this.screenShake = 6;
@@ -735,70 +939,147 @@ export class GameScene {
   // Check interactables relative to player's 2D position
   private checkInteractables(trainCenterX: number, trainCenterY: number) {
     const t = TRANSLATIONS[this.language];
+    const isVi = this.language === 'vi';
+    const isPrologue = this.engine?.prologue.isActive ?? false;
+    const pStep = this.engine?.prologue.step;
 
-    // Interactable hotspots on train & station
-    const interactables: InteractionTarget[] = [
-      {
-        type: 'Throttle',
-        name: t.interactThrottle,
-        position: new THREE.Vector3(0, 1.7, 7.6),
-        distance: 0,
-      },
-      {
-        type: 'Horn',
-        name: t.interactHorn,
-        position: new THREE.Vector3(-0.8, 1.9, 7.6),
-        distance: 0,
-      },
-      {
+    const interactables: InteractionTarget[] = [];
+
+    if (isPrologue) {
+      // 1. Radio Message Step
+      if (pStep === 'radio_message') {
+        interactables.push({
+          type: 'Radio',
+          id: 'depot_radio',
+          name: isVi ? 'Bật Máy Thu Radio Khẩn Cấp [E]' : 'Turn on Emergency Radio [E]',
+          position: new THREE.Vector3(3.8, 1.4, 6.0),
+          distance: 0,
+        });
+      }
+
+      // 2. Scavenge Resources Step
+      if (pStep === 'scavenge_resources') {
+        if (this.engine?.prologue.fuelCollected === 0) {
+          interactables.push({
+            type: 'Loot',
+            id: 'crate_prologue_fuel',
+            name: isVi ? 'Hút Bình Nhiên Liệu (+25L) [E]' : 'Siphon Fuel Canister (+25L) [E]',
+            position: new THREE.Vector3(4.0, 1.4, 1.5),
+            distance: 0,
+          });
+        }
+        if (this.engine?.prologue.scrapCollected === 0) {
+          interactables.push({
+            type: 'Loot',
+            id: 'crate_prologue_scrap',
+            name: isVi ? 'Thu Gom Phế Liệu & Ống Nối (+15) [E]' : 'Salvage Scrap Metal & Pipes (+15) [E]',
+            position: new THREE.Vector3(4.0, 1.4, -8.5),
+            distance: 0,
+          });
+        }
+      }
+
+      // 3. Repair Steam Manifold Step
+      if (pStep === 'repair_engine') {
+        interactables.push({
+          type: 'Repair',
+          id: 'locomotive_repair',
+          name: isVi ? 'Hàn Kín Ống Hơi Nồi Hơi Đầu Máy [E]' : 'Weld Locomotive Steam Manifold [E]',
+          position: new THREE.Vector3(-1.0, 1.7, 7.5),
+          distance: 0,
+        });
+      }
+
+      // 4. Departure Step
+      if (pStep === 'depart_to_settlement') {
+        interactables.push({
+          type: 'Throttle',
+          name: isVi ? 'Bảng Điều Khiển Cần Ga Đầu Máy (W/S) [E]' : 'Locomotive Throttle Controls (W/S) [E]',
+          position: new THREE.Vector3(0, 1.7, 7.6),
+          distance: 0,
+        });
+        interactables.push({
+          type: 'Horn',
+          name: t.interactHorn,
+          position: new THREE.Vector3(-0.8, 1.9, 7.6),
+          distance: 0,
+        });
+      }
+
+      // Carriage Defense Firing Point
+      interactables.push({
         type: 'Turret',
-        name: this.isMountedToTurret ? t.interactDismountTurret : t.interactMountTurret,
-        position: new THREE.Vector3(0, 3.2, -14.5),
+        name: this.isMountedToTurret
+          ? (isVi ? 'Rời Khỏi Vị Trí Súng Phòng Thủ' : 'Dismount Defense Position')
+          : (isVi ? 'Vào Vị Trí Súng Phòng Thủ Toa Tàu' : 'Mount Carriage Defense Point'),
+        position: new THREE.Vector3(0, 2.8, -12.0),
         distance: 0,
-      },
-      {
-        type: 'Workbench',
-        name: t.interactWorkbench,
-        position: new THREE.Vector3(-0.8, 1.5, -4.5),
-        distance: 0,
-      },
-      {
-        type: 'Storage',
-        name: t.interactStorage,
-        position: new THREE.Vector3(0, 1.5, -24.5),
-        distance: 0,
-      },
-    ];
-
-    if (this.stationVisible) {
+      });
+    } else {
+      // Standard full game interactables
       interactables.push(
         {
-          type: 'Loot',
-          id: 'crate_scrap',
-          name: t.interactLootScrap,
-          position: new THREE.Vector3(4.2, 1.4, 10),
+          type: 'Throttle',
+          name: t.interactThrottle,
+          position: new THREE.Vector3(0, 1.7, 7.6),
           distance: 0,
         },
         {
-          type: 'Loot',
-          id: 'crate_fuel',
-          name: t.interactLootFuel,
-          position: new THREE.Vector3(4.2, 1.4, 0),
+          type: 'Horn',
+          name: t.interactHorn,
+          position: new THREE.Vector3(-0.8, 1.9, 7.6),
           distance: 0,
         },
         {
-          type: 'Loot',
-          id: 'crate_ammo',
-          name: t.interactLootAmmo,
-          position: new THREE.Vector3(4.2, 1.4, -10),
+          type: 'Turret',
+          name: this.isMountedToTurret ? t.interactDismountTurret : t.interactMountTurret,
+          position: new THREE.Vector3(0, 3.2, -14.5),
+          distance: 0,
+        },
+        {
+          type: 'Workbench',
+          name: t.interactWorkbench,
+          position: new THREE.Vector3(-0.8, 1.5, -4.5),
+          distance: 0,
+        },
+        {
+          type: 'Storage',
+          name: t.interactStorage,
+          position: new THREE.Vector3(0, 1.5, -24.5),
           distance: 0,
         }
       );
+
+      if (this.stationVisible) {
+        interactables.push(
+          {
+            type: 'Loot',
+            id: 'crate_scrap',
+            name: t.interactLootScrap,
+            position: new THREE.Vector3(4.2, 1.4, 10),
+            distance: 0,
+          },
+          {
+            type: 'Loot',
+            id: 'crate_fuel',
+            name: t.interactLootFuel,
+            position: new THREE.Vector3(4.2, 1.4, 0),
+            distance: 0,
+          },
+          {
+            type: 'Loot',
+            id: 'crate_ammo',
+            name: t.interactLootAmmo,
+            position: new THREE.Vector3(4.2, 1.4, -10),
+            distance: 0,
+          }
+        );
+      }
     }
 
     // 2D distance check
     let closest: InteractionTarget | null = null;
-    let minDist = 3.5;
+    let minDist = 3.8;
 
     for (const item of interactables) {
       const dist = this.playerPos.distanceTo(item.position);
@@ -815,13 +1096,15 @@ export class GameScene {
   private updatePlayerMovement(delta: number) {
     if (this.isMountedToTurret) return;
 
-    const moveSpeed = this.keys['ShiftLeft'] || this.keys['ShiftRight'] ? 6.5 : 3.8;
+    const controls = SettingsManager.getSettings().controls;
+    const isSprint = this.keys['ShiftLeft'] || this.keys['ShiftRight'] || (controls.sprint && this.keys[controls.sprint]);
+    const moveSpeed = isSprint ? 6.5 : 3.8;
     const moveDir = new THREE.Vector3();
 
-    if (this.keys['KeyW'] || this.keys['ArrowUp']) moveDir.z += 1;
-    if (this.keys['KeyS'] || this.keys['ArrowDown']) moveDir.z -= 1;
-    if (this.keys['KeyA'] || this.keys['ArrowLeft']) moveDir.x -= 1;
-    if (this.keys['KeyD'] || this.keys['ArrowRight']) moveDir.x += 1;
+    if (this.keys['KeyW'] || this.keys['ArrowUp'] || (controls.forward && this.keys[controls.forward])) moveDir.z += 1;
+    if (this.keys['KeyS'] || this.keys['ArrowDown'] || (controls.backward && this.keys[controls.backward])) moveDir.z -= 1;
+    if (this.keys['KeyA'] || this.keys['ArrowLeft'] || (controls.left && this.keys[controls.left])) moveDir.x -= 1;
+    if (this.keys['KeyD'] || this.keys['ArrowRight'] || (controls.right && this.keys[controls.right])) moveDir.x += 1;
 
     if (moveDir.lengthSq() > 0) {
       moveDir.normalize();
@@ -857,9 +1140,10 @@ export class GameScene {
       this.screenShake = Math.max(0, this.screenShake - delta * 15);
     }
 
-    // Shake offset
-    const shakeX = (Math.random() - 0.5) * this.screenShake;
-    const shakeY = (Math.random() - 0.5) * this.screenShake;
+    // Shake offset (scaled by screenShakeEnabled setting)
+    const effectiveShake = this.screenShakeEnabled ? this.screenShake : 0;
+    const shakeX = (Math.random() - 0.5) * effectiveShake;
+    const shakeY = (Math.random() - 0.5) * effectiveShake;
 
     ctx.save();
     ctx.translate(shakeX, shakeY);
@@ -1204,86 +1488,119 @@ export class GameScene {
       });
     }
 
-    // Coupler 1-2
-    ctx.fillStyle = '#18181b';
-    ctx.fillRect(trainCenterX - 4, locoY + 128, 8, 12);
+    const carriagesToRender = this.engine?.carriages && this.engine.carriages.length > 1
+      ? this.engine.carriages.slice(1)
+      : [
+          { id: 'car_defense', type: 'Defense' },
+          { id: 'car_workshop', type: 'Workshop' },
+          { id: 'car_storage', type: 'Storage' },
+          { id: 'car_power', type: 'Power' },
+        ];
 
-    // 2. Defense Carriage (Turret)
-    const defY = locoY + 138;
-    const defSprite = this.spriteCache['carriage_defense'];
-    if (defSprite) {
-      ctx.drawImage(defSprite, trainCenterX - 34, defY);
-    }
+    let currentY = locoY + 128;
 
-    // Rotating Gatling Turret
-    const turretPivotX = trainCenterX;
-    const turretPivotY = defY + 55;
-    const turretSprite = this.spriteCache['turret_cannon'];
+    for (let i = 0; i < carriagesToRender.length; i++) {
+      const c = carriagesToRender[i];
 
-    if (turretSprite) {
-      ctx.save();
-      ctx.translate(turretPivotX, turretPivotY);
-      // Recoil kickback along firing angle
-      const recoilOffsetX = -Math.cos(this.turretAngle) * this.turretRecoil;
-      const recoilOffsetY = -Math.sin(this.turretAngle) * this.turretRecoil;
-      ctx.translate(recoilOffsetX, recoilOffsetY);
-      ctx.rotate(this.turretAngle + Math.PI / 2); // sprite faces upward by default
-      ctx.drawImage(turretSprite, -22, -27);
-      ctx.restore();
-    }
+      // Coupler
+      ctx.fillStyle = '#18181b';
+      ctx.fillRect(trainCenterX - 4, currentY, 8, 10);
+      currentY += 10;
 
-    // Muzzle Flash
-    if (this.muzzleFlashTimer > 0) {
-      ctx.save();
-      ctx.translate(turretPivotX, turretPivotY);
-      const flashDist = 34;
-      const fx = Math.cos(this.turretAngle) * flashDist;
-      const fy = Math.sin(this.turretAngle) * flashDist;
+      if (c.id === 'car_passenger' || c.type === 'Living') {
+        const passSprite = this.spriteCache['carriage_passenger'];
+        if (passSprite) {
+          ctx.drawImage(passSprite, trainCenterX - 34, currentY);
+        }
 
-      // Brilliant yellow-white muzzle flash star
-      ctx.fillStyle = '#fef08a';
-      ctx.beginPath();
-      ctx.arc(fx, fy, 8, 0, Math.PI * 2);
-      ctx.fill();
+        // Observation defense firing point at rear of passenger car
+        const defMountY = currentY + 70;
+        if (this.isMountedToTurret) {
+          ctx.save();
+          ctx.translate(trainCenterX, defMountY);
+          ctx.rotate(this.turretAngle + Math.PI / 2);
+          ctx.fillStyle = '#3f3f46';
+          ctx.fillRect(-6, -12, 12, 16);
+          ctx.fillStyle = '#18181b';
+          ctx.fillRect(-2, -24, 4, 16); // rifle barrel
+          ctx.restore();
+        }
 
-      ctx.fillStyle = '#f97316';
-      ctx.beginPath();
-      ctx.arc(fx, fy, 14, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.restore();
-    }
+        // Muzzle Flash
+        if (this.muzzleFlashTimer > 0) {
+          ctx.save();
+          ctx.translate(trainCenterX, defMountY);
+          const flashDist = 30;
+          const fx = Math.cos(this.turretAngle) * flashDist;
+          const fy = Math.sin(this.turretAngle) * flashDist;
+          ctx.fillStyle = '#fef08a';
+          ctx.beginPath();
+          ctx.arc(fx, fy, 8, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.restore();
+        }
 
-    // Coupler 2-3
-    ctx.fillStyle = '#18181b';
-    ctx.fillRect(trainCenterX - 4, defY + 108, 8, 12);
+        currentY += 108;
+      } else if (c.type === 'Defense') {
+        const defSprite = this.spriteCache['carriage_defense'];
+        if (defSprite) {
+          ctx.drawImage(defSprite, trainCenterX - 34, currentY);
+        }
 
-    // 3. Workshop Carriage
-    const workY = defY + 118;
-    const workSprite = this.spriteCache['carriage_workshop'];
-    if (workSprite) {
-      ctx.drawImage(workSprite, trainCenterX - 34, workY);
-    }
+        // Rotating Gatling Turret
+        const turretPivotX = trainCenterX;
+        const turretPivotY = currentY + 55;
+        const turretSprite = this.spriteCache['turret_cannon'];
 
-    // Coupler 3-4
-    ctx.fillStyle = '#18181b';
-    ctx.fillRect(trainCenterX - 4, workY + 108, 8, 12);
+        if (turretSprite) {
+          ctx.save();
+          ctx.translate(turretPivotX, turretPivotY);
+          const recoilOffsetX = -Math.cos(this.turretAngle) * this.turretRecoil;
+          const recoilOffsetY = -Math.sin(this.turretAngle) * this.turretRecoil;
+          ctx.translate(recoilOffsetX, recoilOffsetY);
+          ctx.rotate(this.turretAngle + Math.PI / 2);
+          ctx.drawImage(turretSprite, -22, -27);
+          ctx.restore();
+        }
 
-    // 4. Storage Carriage
-    const storeY = workY + 118;
-    const storeSprite = this.spriteCache['carriage_storage'];
-    if (storeSprite) {
-      ctx.drawImage(storeSprite, trainCenterX - 34, storeY);
-    }
+        // Muzzle Flash
+        if (this.muzzleFlashTimer > 0) {
+          ctx.save();
+          ctx.translate(turretPivotX, turretPivotY);
+          const flashDist = 34;
+          const fx = Math.cos(this.turretAngle) * flashDist;
+          const fy = Math.sin(this.turretAngle) * flashDist;
+          ctx.fillStyle = '#fef08a';
+          ctx.beginPath();
+          ctx.arc(fx, fy, 8, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.fillStyle = '#f97316';
+          ctx.beginPath();
+          ctx.arc(fx, fy, 14, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.restore();
+        }
 
-    // Coupler 4-5
-    ctx.fillStyle = '#18181b';
-    ctx.fillRect(trainCenterX - 4, storeY + 108, 8, 12);
-
-    // 5. Power Carriage
-    const powerY = storeY + 118;
-    const powerSprite = this.spriteCache['carriage_power'];
-    if (powerSprite) {
-      ctx.drawImage(powerSprite, trainCenterX - 34, powerY);
+        currentY += 108;
+      } else if (c.type === 'Workshop') {
+        const workSprite = this.spriteCache['carriage_workshop'];
+        if (workSprite) {
+          ctx.drawImage(workSprite, trainCenterX - 34, currentY);
+        }
+        currentY += 108;
+      } else if (c.type === 'Storage') {
+        const storeSprite = this.spriteCache['carriage_storage'];
+        if (storeSprite) {
+          ctx.drawImage(storeSprite, trainCenterX - 34, currentY);
+        }
+        currentY += 108;
+      } else if (c.type === 'Power') {
+        const powerSprite = this.spriteCache['carriage_power'];
+        if (powerSprite) {
+          ctx.drawImage(powerSprite, trainCenterX - 34, currentY);
+        }
+        currentY += 104;
+      }
     }
   }
 

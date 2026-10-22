@@ -169,3 +169,172 @@ export interface TrackHazard {
   severity: 'Caution' | 'Danger' | 'Critical';
   damageAmount: number;
 }
+
+export type PrologueStep =
+  | 'intro_cutscene'
+  | 'radio_message'
+  | 'scavenge_resources'
+  | 'repair_engine'
+  | 'raider_ambush'
+  | 'depart_to_settlement'
+  | 'prologue_complete';
+
+export interface PrologueState {
+  isActive: boolean;
+  step: PrologueStep;
+  fuelCollected: number;
+  fuelTarget: number;
+  scrapCollected: number;
+  scrapTarget: number;
+  engineRepaired: boolean;
+  raidersDefeated: number;
+  raidersTarget: number;
+  settlementDistanceKm: number;
+  settlementTargetKm: number;
+  radioMessageRead: boolean;
+  openingSeen: boolean;
+  dialogueOpen: boolean;
+  currentDialogue?: {
+    speaker: string;
+    title: string;
+    text: string;
+    actionLabel?: string;
+  };
+}
+
+export type ChapterId =
+  | 'Prologue'
+  | 'Chapter1'
+  | 'Chapter2'
+  | 'Chapter3'
+  | 'Chapter4'
+  | 'Chapter5'
+  | 'Chapter6';
+
+export interface Companion {
+  id: string;
+  name: string;
+  role: string;
+  avatar: string;
+  bio: string;
+  isRecruited: boolean;
+  loyalty: number;
+  unlockedPerk: string;
+  perkDescription: string;
+  dialogueLines: string[];
+}
+
+export interface AudioLog {
+  id: string;
+  number: number;
+  title: string;
+  speaker: string;
+  date: string;
+  location: string;
+  transcript: string;
+  unlocked: boolean;
+  chapter: ChapterId;
+}
+
+export interface RadioTransmission {
+  id: string;
+  sender: string;
+  senderRole: string;
+  avatar: string;
+  message: string;
+  timestamp: number;
+  urgent: boolean;
+}
+
+export interface StoryMission {
+  id: string;
+  chapter: ChapterId;
+  title: string;
+  description: string;
+  objective: string;
+  currentCount: number;
+  targetCount: number;
+  completed: boolean;
+  rewardText: string;
+}
+
+export type SaveType = 'manual' | 'auto_checkpoint' | 'story_event';
+
+export interface SaveSlotMetadata {
+  slotId: string;
+  slotName: string;
+  version: number;
+  savedAt: number;
+  playtimeSeconds: number;
+  chapter: ChapterId;
+  chapterTitle: string;
+  location: string;
+  missionTitle: string;
+  missionObjective: string;
+  missionProgress: string;
+  distanceKm: number;
+  carriagesCount: number;
+  fuel: number;
+  trainHealth: number;
+  maxTrainHealth: number;
+  saveType: SaveType;
+  isCorrupted?: boolean;
+  corruptedReason?: string;
+}
+
+export interface FullSaveData {
+  version: number;
+  slotId: string;
+  slotName: string;
+  savedAt: number;
+  playtimeSeconds: number;
+  saveType: SaveType;
+  gameState: GameState;
+  chapter: ChapterId;
+  chapterTitle: string;
+  location: string;
+  trainStats: TrainStats;
+  playerStats: PlayerStats;
+  carriages: CarriageData[];
+  inventory: InventoryItem[];
+  storage: InventoryItem[];
+  turret: TurretState;
+  currentWeather: 'clear' | 'rain' | 'blizzard';
+  prologue: PrologueState;
+  completedObjectives: string[];
+  storyDecisions: Record<string, string | boolean>;
+  resources: {
+    scrap: number;
+    steel: number;
+    water: number;
+    food: number;
+    ammo: number;
+    chemical: number;
+    electronics: number;
+  };
+  companions?: Companion[];
+  audioLogs?: AudioLog[];
+  isCorrupted?: boolean;
+  corruptedReason?: string;
+  rawBackup?: string;
+}
+
+export interface LootPickup {
+  id: string;
+  type: 'scrap' | 'ammo' | 'fuel';
+  name: string;
+  quantity: number;
+  x: number;
+  y: number;
+  z: number;
+  life: number;
+  maxLife: number;
+}
+
+export interface TutorialStep {
+  id: 'movement' | 'aiming' | 'scavenging' | 'repairs' | 'upgrades';
+  title: string;
+  instruction: string;
+  completed: boolean;
+}
+

@@ -61,7 +61,62 @@ export const TRANSLATIONS = {
     stationDeparted: 'ĐOÀN TÀU ĐÃ RỜI TRẠM',
     weatherChangedAlert: 'CẢNH BÁO: THỜI TIẾT CHUYỂN BIẾN',
 
-    // Intro Screen
+    // Main Menu & Opening Screen
+    menuTitle: 'ĐOÀN TÀU CUỐI CÙNG',
+    menuSubtitle: 'CHUYẾN CHẠY BẤT TẬN',
+    menuTagline: 'Mô Phỏng Sinh Tồn Trên Đường Ray Hậu Tận Thế',
+    menuPressAnyKey: 'NHẤP CHUỘT HOẶC NHẤN PHÍM BẤT KỲ ĐỂ VÀO MENU',
+    menuNewGame: 'TRÒ CHƠI MỚI',
+    menuContinue: 'TIẾP TỤC',
+    menuLoadGame: 'TẢI BẢN LƯU',
+    menuSettings: 'CÀI ĐẶT',
+    menuCredits: 'LỜI CẢM ƠN',
+    menuReturnToTitle: 'MÀN HÌNH CHÍNH',
+    menuNoSaveTitle: 'Chưa Có Bản Lưu',
+    menuNoSaveDesc: 'Không tìm thấy dữ liệu lưu trước đó. Vui lòng bắt đầu một Trò Chơi Mới.',
+    menuSaveFound: 'Đã tìm thấy bản lưu gần nhất',
+    menuSaveDistance: 'Quãng đường đã đi',
+    menuSaveCarriages: 'Số lượng toa tàu',
+    menuSaveFuel: 'Nhiên liệu còn',
+
+    // Opening Sequence & Cinematic Intro
+    introCinematicTitle: 'LỜI MỞ ĐẦU',
+    introSkip: 'BỎ QUA [ESC / SPACE]',
+    introNext: 'TIẾP THEO [ENTER]',
+    introBeginRun: 'BẮT ĐẦU CHUYẾN CHẠY [ENTER]',
+    introAct1Title: 'HỒI I: ĐẠI SỤP ĐỔ',
+    introAct1Subtitle: 'Năm 2084 · Thảm họa năng lượng Eternal Core',
+    introAct1Text: 'Thí nghiệm năng lượng Eternal Core tại Viện Nghiên Cứu Helix thất bại thảm khốc. Cột sóng xung kích từ trường xé toạc lưới điện lục địa, đánh sập nền văn minh và phủ một mùa đông vĩnh cửu xuống toàn bộ bề mặt Trái Đất.',
+    introAct2Title: 'HỒI II: ĐƯỜNG RAY CUỐI CÙNG',
+    introAct2Subtitle: 'Tuyến đường huyết mạch duy nhất còn sót lại',
+    introAct2Text: 'Tất cả các tuyến đường cao tốc đều bị vùi lấp dưới băng đá và các sinh vật đột biến. Bầu trời bị bóp nghẹt bởi những cơn bão tuyết độc hại. Chỉ duy nhất mạng lưới đường sắt công nghiệp hạng nặng xuyên lục địa còn đứng vững—trở thành hệ thần kinh kim loại nối liền các phế tích.',
+    introAct3Title: 'HỒI III: ELIAS VOSS VÀ TERMINAL ZERO',
+    introAct3Subtitle: 'Kho Ga Phế Tích Sector 07 · Điểm Khởi Đầu',
+    introAct3Text: 'Bạn là Elias Voss, cựu kỹ sư bảo trì đường sắt. Bạn tỉnh lại giữa kho ga phế tích hoang tàn cạnh một đầu máy Shunter cũ kỹ và một toa hành khách đơn sơ. Tiếng radio rè rè phát ra thông điệp bí ẩn: "Terminal Zero vẫn còn hoạt động..." Chuyến chạy sinh tồn bất tận chính thức bắt đầu.',
+
+    // Settings Modal
+    settingsTitle: 'CÀI ĐẶT TRÒ CHƠI',
+    settingsAudioHeader: 'ÂM THANH',
+    settingsMasterVol: 'Âm Lượng Tổng',
+    settingsSfxVol: 'Hiệu Ứng Âm Thanh',
+    settingsMusicVol: 'Âm Thanh Đầu Máy & Tiếng Gió',
+    settingsMute: 'Tắt Toàn Bộ Âm Thanh',
+    settingsDisplayHeader: 'HÌNH ẢNH & HIỆU ỨNG',
+    settingsScreenShake: 'Rung Lắc Màn Hình (Screen Shake)',
+    settingsCrtFilter: 'Bộ Lọc Retro Scanlines CRT',
+    settingsControlsHeader: 'TỔNG HỢP PHÍM ĐIỀU KHIỂN',
+    settingsClose: 'LƯU & ĐÓNG',
+
+    // Credits Modal
+    creditsTitle: 'ĐỘI NGŨ PHÁT TRIỂN & BẢN THIẾT KẾ',
+    creditsRoleLead: 'Thiết Kế Trò Chơi & Lập Trình Engine Pixel 2D',
+    creditsRoleArt: 'Đồ Họa Pixel Art & Hiệu Ứng Bầu Khí Quyển',
+    creditsRoleSound: 'Âm Thanh & Bộ Tổng Hợp Web Audio API',
+    creditsRoleTech: 'Công Nghệ Nền Tảng: HTML5 Canvas, React, TypeScript, Tailwind CSS',
+    creditsDedication: 'Dành tặng cho những ai luôn tìm kiếm ngọn lửa hy vọng trên những đường ray băng giá.',
+    creditsClose: 'ĐÓNG',
+
+    // Intro Screen (Original)
     introTitle: 'ĐOÀN TÀU CUỐI CÙNG: CHUYẾN CHẠY BẤT TẬN',
     introDesc:
       'Bạn tỉnh dậy bên trong toa sinh hoạt của một đoàn tàu bọc thép kiên cố đang lao vun vút qua vùng đất hoang tàn băng giá. Hãy điều khiển cần ga, quản lý nhiên liệu, phân phối điện năng, dùng tháp pháo Gatling đẩy lùi thực thể Chaser và thu gom tài nguyên tại các trạm phế tích trước khi đoàn tàu khởi hành.',
@@ -249,7 +304,62 @@ export const TRANSLATIONS = {
     stationDeparted: 'TRAIN HAS DEPARTED DEPOT',
     weatherChangedAlert: 'WARNING: WEATHER SHIFT',
 
-    // Intro Screen
+    // Main Menu & Opening Screen
+    menuTitle: 'THE LAST TRACK',
+    menuSubtitle: 'ETERNAL RUN',
+    menuTagline: 'Post-Apocalyptic Armored Railway Survival',
+    menuPressAnyKey: 'PRESS ANY KEY OR CLICK TO ENTER',
+    menuNewGame: 'NEW GAME',
+    menuContinue: 'CONTINUE',
+    menuLoadGame: 'LOAD GAME',
+    menuSettings: 'SETTINGS',
+    menuCredits: 'CREDITS',
+    menuReturnToTitle: 'TITLE SCREEN',
+    menuNoSaveTitle: 'No Save Archive Found',
+    menuNoSaveDesc: 'No previous save records were found on this system. Please start a New Game.',
+    menuSaveFound: 'Latest Auto-Save Archive',
+    menuSaveDistance: 'Distance Traveled',
+    menuSaveCarriages: 'Carriages Attached',
+    menuSaveFuel: 'Remaining Fuel',
+
+    // Opening Sequence & Cinematic Intro
+    introCinematicTitle: 'PROLOGUE INTRODUCTION',
+    introSkip: 'SKIP INTRO [ESC / SPACE]',
+    introNext: 'NEXT [ENTER]',
+    introBeginRun: 'BEGIN THE RUN [ENTER]',
+    introAct1Title: 'ACT I: THE GREAT COLLAPSE',
+    introAct1Subtitle: 'Year 2084 · The Eternal Core Energy Catastrophe',
+    introAct1Text: 'The catastrophic containment failure of the Eternal Core project at Helix Dynamics tore open the continental power grid, shattering civilization and plunging the northern hemisphere into a permanent sub-zero nuclear winter.',
+    introAct2Title: 'ACT II: THE LAST TRACK',
+    introAct2Subtitle: 'The Only Surviving Continental Transit Arteries',
+    introAct2Text: 'Highways collapsed under fractured permafrost, and skies choked with toxic blizzards. Only the heavy industrial railway network survived—a metallic nervous system cutting across desolate wastelands and connecting isolated survivor enclaves.',
+    introAct3Title: 'ACT III: ELIAS VOSS & TERMINAL ZERO',
+    introAct3Subtitle: 'Sector 07 Ruined Freight Depot · The Last Departure',
+    introAct3Text: 'You awaken as Elias Voss, a former railway maintenance engineer. Beside you stands a weathered locomotive and a single passenger coach. A crackling vacuum-tube radio breaks the silence: "Terminal Zero is still transmitting..." The eternal survival run begins now.',
+
+    // Settings Modal
+    settingsTitle: 'GAME SETTINGS',
+    settingsAudioHeader: 'AUDIO & SOUND DESIGN',
+    settingsMasterVol: 'Master Volume',
+    settingsSfxVol: 'Sound Effects Volume',
+    settingsMusicVol: 'Locomotive Engine & Wind Ambiance',
+    settingsMute: 'Mute All Sound',
+    settingsDisplayHeader: 'VISUALS & DISPLAY',
+    settingsScreenShake: 'Screen Shake Intensity',
+    settingsCrtFilter: 'Retro CRT Scanline Filter',
+    settingsControlsHeader: 'CONTROL SCHEME SUMMARY',
+    settingsClose: 'SAVE & CLOSE',
+
+    // Credits Modal
+    creditsTitle: 'DEVELOPMENT TEAM & ARCHITECTURE',
+    creditsRoleLead: 'Game Design & 2D Pixel-Art Engine',
+    creditsRoleArt: 'Pixel Art Direction & Atmospheric Effects',
+    creditsRoleSound: 'Procedural Audio Synthesis & Web Audio API',
+    creditsRoleTech: 'Built With: HTML5 Canvas 2D, React, TypeScript, Tailwind CSS',
+    creditsDedication: 'Dedicated to all wanderers searching for the last light along the frozen tracks.',
+    creditsClose: 'CLOSE',
+
+    // Intro Screen (Original)
     introTitle: 'THE LAST TRACK: ETERNAL RUN',
     introDesc:
       'You awaken inside the living carriage of an armored locomotive barreling across the frozen wasteland. Operate the throttle, manage fuel and electrical grid power, defend against chaser entities with the defense turret, and scavenge abandoned outposts before the train departs.',

@@ -1,11 +1,17 @@
 import {
+  AudioLog,
   CarriageData,
+  ChapterId,
+  Companion,
   CraftingRecipe,
   EnemyEntity,
   GameState,
   HUDNotification,
   InventoryItem,
   PlayerStats,
+  PrologueState,
+  PrologueStep,
+  SaveType,
   StationData,
   ThrottleLevel,
   TrackHazard,
@@ -14,26 +20,29 @@ import {
   TurretState,
   UpgradeOption,
   WeatherTimelineItem,
+  LootPickup,
+  TutorialStep,
 } from '../types/game';
 import { soundManager } from '../audio/soundManager';
+import { SaveManager } from './saveManager';
+import { AUDIO_LOGS_DATABASE, INITIAL_COMPANIONS } from './storyData';
 
 const DEFAULT_RECIPES: CraftingRecipe[] = [
   {
     id: 'recipe_ammo',
-    name: '7.62mm Turret Ammo (x50)',
-    description: 'Standard armor-piercing rounds for the train Gatling turret.',
+    name: '7.62mm Turret Ammo (+50 rounds)',
+    description: 'Standard ammunition for the train defense Gatling turret.',
     category: 'Ammunition',
     inputs: [
-      { itemId: 'scrap', name: 'Scrap Metal', quantity: 15 },
-      { itemId: 'chemical', name: 'Chemical Powder', quantity: 5 },
+      { itemId: 'scrap', name: 'Scrap Metal', quantity: 10 },
     ],
     output: {
       id: 'ammo_762',
       name: '7.62mm Ammo',
       type: 'Ammo',
-      weight: 2.0,
+      weight: 1.0,
       quantity: 50,
-      maxStack: 300,
+      maxStack: 400,
       description: 'Belt-fed ammo for defense turret.',
       icon: 'crosshair',
     },
@@ -42,18 +51,17 @@ const DEFAULT_RECIPES: CraftingRecipe[] = [
   },
   {
     id: 'recipe_repair_kit',
-    name: 'Hull Welding Patch Kit',
+    name: 'Hull Welding Patch Kit (+50 HP)',
     description: 'Restores +50 HP to damaged carriage hulls or locomotive.',
     category: 'Repair',
     inputs: [
-      { itemId: 'scrap', name: 'Scrap Metal', quantity: 20 },
-      { itemId: 'steel', name: 'Refined Steel', quantity: 5 },
+      { itemId: 'scrap', name: 'Scrap Metal', quantity: 10 },
     ],
     output: {
       id: 'repair_kit',
       name: 'Welding Patch Kit',
       type: 'Material',
-      weight: 3.5,
+      weight: 2.0,
       quantity: 1,
       maxStack: 10,
       description: 'Used to repair carriage armor breaches.',
@@ -68,14 +76,14 @@ const DEFAULT_RECIPES: CraftingRecipe[] = [
     description: 'Synthesized synthetic fuel directly injectable into locomotive fuel tank.',
     category: 'Components',
     inputs: [
-      { itemId: 'chemical', name: 'Chemical Powder', quantity: 10 },
-      { itemId: 'water', name: 'Purified Water', quantity: 10 },
+      { itemId: 'chemical', name: 'Chemical Powder', quantity: 6 },
+      { itemId: 'water', name: 'Purified Water', quantity: 4 },
     ],
     output: {
-      id: 'fuel_can',
+      id: 'biofuel',
       name: 'Synthetic Fuel (+25L)',
       type: 'Resource',
-      weight: 5.0,
+      weight: 4.0,
       quantity: 1,
       maxStack: 5,
       description: 'High octane fuel canister.',
@@ -90,46 +98,57 @@ const DEFAULT_UPGRADES: UpgradeOption[] = [
   {
     id: 'upg_steel_armor',
     name: 'Reinforced Steel Armor Plates',
-    targetType: 'Defense',
+    targetType: 'All',
     slotType: 'Armor',
-    description: '+25% Armor protection, +60 Carriage HP, adds 2.5 tons weight.',
+    description: '+25% Armor protection, +60 Carriage HP. Visibly bolts heavy steel plates along carriage sides.',
     cost: [
-      { itemId: 'steel', name: 'Refined Steel', quantity: 20 },
-      { itemId: 'scrap', name: 'Scrap Metal', quantity: 30 },
+      { itemId: 'scrap', name: 'Scrap Metal', quantity: 20 },
+      { itemId: 'steel', name: 'Refined Steel', quantity: 4 },
     ],
-    weightDelta: 2.5,
+    weightDelta: 1.5,
     powerDelta: 0,
     healthDelta: 60,
     armorDelta: 25,
   },
   {
     id: 'upg_gatling_mk2',
-    name: 'Gatling Mk2 Overclocked Rotor',
-    targetType: 'Defense',
+    name: 'Gatling Autocannon Mk2 Rotor',
+    targetType: 'All',
     slotType: 'Weapon',
-    description: '+50% Turret Fire Rate, +4 Damage per shot, requires +25W extra power.',
+    description: '+12 Damage (22 -> 34), +50% Fire Rate, +80 Max Ammo capacity. Visibly transforms turret into dual heavy rotary barrels.',
     cost: [
-      { itemId: 'steel', name: 'Refined Steel', quantity: 25 },
-      { itemId: 'electronics', name: 'Electronics Parts', quantity: 12 },
-      { itemId: 'scrap', name: 'Scrap Metal', quantity: 40 },
+      { itemId: 'scrap', name: 'Scrap Metal', quantity: 25 },
+      { itemId: 'steel', name: 'Refined Steel', quantity: 6 },
     ],
     weightDelta: 0.8,
-    powerDelta: 25,
-    damageDelta: 4,
+    powerDelta: 15,
+    damageDelta: 12,
   },
   {
     id: 'upg_generator_mk2',
-    name: 'Auxiliary Diesel Generator Mk2',
+    name: 'Boiler Supercharger & Auxiliary Generator',
     targetType: 'Locomotive',
     slotType: 'Power',
-    description: 'Doubles electrical grid output from 120W to 240W. Increases train weight by 1.8 tons.',
+    description: '+120W Power generation, +15 km/h Top Speed. Visibly adds reinforced front wedge cowcatcher with amber radiator and twin exhaust stacks.',
     cost: [
-      { itemId: 'steel', name: 'Refined Steel', quantity: 15 },
-      { itemId: 'electronics', name: 'Electronics Parts', quantity: 15 },
       { itemId: 'scrap', name: 'Scrap Metal', quantity: 25 },
+      { itemId: 'steel', name: 'Refined Steel', quantity: 6 },
     ],
     weightDelta: 1.8,
     powerDelta: -120, // Negative delta = produces 120W more
+  },
+  {
+    id: 'upg_fuel_injector',
+    name: 'High-Pressure Fuel Injectors',
+    targetType: 'Locomotive',
+    slotType: 'Utility',
+    description: 'Reduces fuel burn rate by 30%, adds +25L fuel tank reserve capacity.',
+    cost: [
+      { itemId: 'scrap', name: 'Scrap Metal', quantity: 18 },
+      { itemId: 'steel', name: 'Refined Steel', quantity: 4 },
+    ],
+    weightDelta: 0.5,
+    powerDelta: 5,
   },
 ];
 
@@ -272,12 +291,48 @@ export class GameEngine {
     pitch: 0,
   };
 
-  // Enemies
+  // Enemies & Loot Pickups
   public enemies: EnemyEntity[] = [];
+  public lootPickups: LootPickup[] = [];
   private enemySpawnTimer = 0;
 
   // Station
   public currentStation: StationData | null = null;
+
+  // Phase 4: Interactive Survival Tutorial System
+  public tutorialSteps: TutorialStep[] = [
+    {
+      id: 'movement',
+      title: '1. Khảo Sát & Di Chuyển / Movement',
+      instruction: 'Dùng phím [W/A/S/D] di chuyển dọc đầu máy và toa hành khách.',
+      completed: false,
+    },
+    {
+      id: 'aiming',
+      title: '2. Ngắm Bắn & Chiến Đấu / Combat',
+      instruction: 'Đến vị trí súng phòng thủ toa tàu, nhấn [E] leo lên súng, ngắm chuột và Chuột Trái để bắn hạ kẻ địch.',
+      completed: false,
+    },
+    {
+      id: 'scavenging',
+      title: '3. Thu Gom Tài Nguyên / Scavenging',
+      instruction: 'Nhặt các thùng phế liệu, đạn dược và nhiên liệu rơi trên đường ray hoặc trong kho trạm [E].',
+      completed: false,
+    },
+    {
+      id: 'repairs',
+      title: '4. Hàn Kín & Sửa Chữa / Repairs',
+      instruction: 'Tiếp cận ống hơi đầu máy hoặc mở Bàn Chế Tạo [E] để dùng phế liệu hàn phục hồi thân tàu.',
+      completed: false,
+    },
+    {
+      id: 'upgrades',
+      title: '5. Nâng Cấp Toa Tàu / Upgrades',
+      instruction: 'Mở Bàn Chế Tạo [E] để gắn Giáp Thép Gia Cường hoặc Nâng Cấp Pháo Gatling Mk2.',
+      completed: false,
+    },
+  ];
+  public isTutorialVisible = true;
 
   // Timers for hunger / thirst drain per spec:
   // Hunger base: -1 / 15 sec (spec section 45)
@@ -319,6 +374,40 @@ export class GameEngine {
   public currentTrackHazard: TrackHazard | null = null;
   private distanceToNextHazard = 0.9; // km
 
+  // Phase 1: Prologue System
+  public prologue: PrologueState = {
+    isActive: true,
+    step: 'intro_cutscene',
+    fuelCollected: 0,
+    fuelTarget: 1,
+    scrapCollected: 0,
+    scrapTarget: 15,
+    engineRepaired: false,
+    raidersDefeated: 0,
+    raidersTarget: 3,
+    settlementDistanceKm: 2.5,
+    settlementTargetKm: 2.5,
+    radioMessageRead: false,
+    openingSeen: false,
+    dialogueOpen: true,
+    currentDialogue: {
+      speaker: 'Elias Voss',
+      title: 'Kho Ga Ashfall · Sector 07',
+      text: 'Không khí lạnh buốt xộc vào lồng ngực... Lại một cơn bão tuyết đang kéo đến. Mình đã bất tỉnh bao lâu rồi?',
+    },
+  };
+
+  // Phase 2: Save, Story & Playtime State
+  public playtimeSeconds: number = 0;
+  public currentChapter: ChapterId = 'Prologue';
+  public completedObjectives: string[] = ['prologue_awakening'];
+  public storyDecisions: Record<string, string | boolean> = {
+    radio_terminal_zero_heard: true,
+  };
+  public companions: Companion[] = JSON.parse(JSON.stringify(INITIAL_COMPANIONS));
+  public audioLogs: AudioLog[] = JSON.parse(JSON.stringify(AUDIO_LOGS_DATABASE));
+  public activeSaveSlot: string = 'slot_1';
+
   constructor() {
     Object.defineProperty(this.trainStats, 'fuel', {
       get: () => this.trainStats.currentFuel,
@@ -328,8 +417,280 @@ export class GameEngine {
       enumerable: true,
       configurable: true,
     });
+    this.setupPrologue();
+  }
+
+  public setupPrologue() {
+    this.prologue.isActive = true;
+    this.prologue.step = 'intro_cutscene';
+    this.prologue.fuelCollected = 0;
+    this.prologue.scrapCollected = 0;
+    this.prologue.engineRepaired = false;
+    this.prologue.raidersDefeated = 0;
+    this.prologue.settlementDistanceKm = 2.5;
+    this.prologue.radioMessageRead = false;
+    this.prologue.openingSeen = false;
+    this.prologue.dialogueOpen = true;
+
+    // Phase 1 Initial Train: Exactly 1 Locomotive and 1 ordinary Passenger Carriage
+    this.carriages = [
+      {
+        id: 'car_locomotive',
+        name: 'Đầu Máy Shunter #04 (Phế Tích)',
+        type: 'Locomotive',
+        maxHealth: 350,
+        currentHealth: 160, // fractured steam pipe
+        baseWeight: 22.0,
+        powerConsumption: 10,
+        powerProduction: 80,
+        armorRating: 15,
+        installedUpgrades: [],
+        weaponSlots: 0,
+        armorSlots: 1,
+        utilitySlots: 1,
+        positionIndex: 0,
+      },
+      {
+        id: 'car_passenger',
+        name: 'Toa Hành Khách Hạng B #108',
+        type: 'Living',
+        maxHealth: 250,
+        currentHealth: 250,
+        baseWeight: 10.0,
+        powerConsumption: 15,
+        powerProduction: 0,
+        armorRating: 10,
+        installedUpgrades: [],
+        weaponSlots: 1,
+        armorSlots: 1,
+        utilitySlots: 2,
+        positionIndex: 1,
+      },
+    ];
+
+    // Elias Voss starting inventory: basic tools and very few supplies
+    this.inventory = [
+      { id: 'wrench', name: 'Cờ Lê & Bộ Đồ Nghề Bảo Trì', type: 'Material', weight: 1.0, quantity: 1, maxStack: 1, description: 'Dụng cụ sửa chữa đường sắt tiêu chuẩn.', icon: 'wrench' },
+      { id: 'water', name: 'Bình Nước Dã Ngoại', type: 'Water', weight: 0.5, quantity: 2, maxStack: 10, description: 'Nước uống chưa đóng băng.', icon: 'droplet' },
+      { id: 'food', name: 'Lương Khô Cũ', type: 'Food', weight: 0.2, quantity: 1, maxStack: 10, description: 'Khẩu phần ăn còn sót lại trong tủ khóa.', icon: 'coffee' },
+      { id: 'ammo_762', name: 'Đạn 7.62mm Thặng Dư', type: 'Ammo', weight: 0.05, quantity: 45, maxStack: 300, description: 'Đạn súng phòng thủ toa tàu.', icon: 'crosshair' },
+    ];
+    this.storage = [];
+
+    // Carriage defense firing point
+    this.turret = {
+      id: 'turret_01',
+      name: 'Vị Trí Súng Phòng Thủ Toa Tàu (7.62mm)',
+      type: 'Gatling',
+      level: 1,
+      damage: 22,
+      range: 65,
+      fireRate: 4,
+      powerConsumption: 10,
+      ammoType: '7.62mm Ammo',
+      currentAmmo: 45,
+      maxAmmo: 100,
+      heat: 0,
+      isOverheated: false,
+      targetCarriageId: 'car_passenger',
+      isMounted: false,
+      yaw: 0,
+      pitch: 0,
+    };
+
+    this.trainStats.currentSpeed = 0;
+    this.trainStats.targetSpeed = 0;
+    this.trainStats.maxSpeed = 70;
+    this.trainStats.throttle = 0;
+    this.trainStats.state = 'Stationary';
+    this.trainStats.currentFuel = 12; // limited fuel
+    this.trainStats.maxFuel = 60;
+    this.trainStats.distanceTraveled = 0;
+    this.trainStats.nextStationDistance = 2.5;
+
     this.recalculateTrainStats();
   }
+
+  public advancePrologueCutscene() {
+    if (this.prologue.step === 'intro_cutscene') {
+      this.prologue.openingSeen = true;
+      this.prologue.step = 'radio_message';
+      this.prologue.dialogueOpen = true;
+      soundManager.playAlarm();
+    }
+  }
+
+  public readRadioTransmission() {
+    this.prologue.radioMessageRead = true;
+    this.prologue.step = 'scavenge_resources';
+    this.prologue.dialogueOpen = false;
+    soundManager.playClick();
+    this.addNotification({
+      title: 'NHIỆM VỤ: TÌM KIẾM TÀI NGUYÊN',
+      details: 'Thu thập 1 bình nhiên liệu (+25L) và 15 phế liệu tại sân ga kho',
+      type: 'loot',
+    });
+  }
+
+  public scavengePrologueCrate(crateId: string) {
+    if (!this.prologue.isActive) return;
+
+    if (crateId === 'crate_prologue_fuel' && this.prologue.fuelCollected === 0) {
+      this.prologue.fuelCollected = 1;
+      this.trainStats.currentFuel = Math.min(this.trainStats.maxFuel, this.trainStats.currentFuel + 25);
+      this.inventory.push({
+        id: 'fuel_can',
+        name: 'Can Nhiên Liệu Tổng Hợp (+25L)',
+        type: 'Resource',
+        weight: 4.0,
+        quantity: 1,
+        maxStack: 5,
+        description: 'Bình nhiên liệu đã sạc đầy vào bình chứa.',
+        icon: 'flame',
+      });
+      soundManager.playLootSound();
+      this.addNotification({
+        title: 'Đã Thu Thập Nhiên Liệu!',
+        details: '+25L Nhiên liệu được nạp vào đầu máy (Mức hiện tại: ' + Math.round(this.trainStats.currentFuel) + 'L)',
+        type: 'loot',
+      });
+    } else if (crateId === 'crate_prologue_scrap' && this.prologue.scrapCollected === 0) {
+      this.prologue.scrapCollected = 15;
+      const existing = this.inventory.find((i) => i.id === 'scrap');
+      if (existing) {
+        existing.quantity += 15;
+      } else {
+        this.inventory.push({
+          id: 'scrap',
+          name: 'Phế Liệu Kim Loại',
+          type: 'Material',
+          weight: 0.5,
+          quantity: 15,
+          maxStack: 100,
+          description: 'Mảnh kim loại và phụ tùng ống dẫn.',
+          icon: 'box',
+        });
+      }
+      soundManager.playLootSound();
+      this.addNotification({
+        title: 'Đã Thu Gom Phế Liệu!',
+        details: '+15 Phế liệu kim loại và đầu nối ống hơi',
+        type: 'loot',
+      });
+    }
+
+    if (this.prologue.fuelCollected >= 1 && this.prologue.scrapCollected >= 15 && this.prologue.step === 'scavenge_resources') {
+      this.prologue.step = 'repair_engine';
+      this.addNotification({
+        title: 'ĐỦ VẬT LIỆU BẢO TRÌ!',
+        details: 'Đến gần thân đầu máy để hàn ống hơi bị vỡ [E]',
+        type: 'craft',
+      });
+    }
+  }
+
+  public repairLocomotiveEngine() {
+    if (!this.prologue.isActive || this.prologue.step !== 'repair_engine') return;
+
+    this.carriages[0].currentHealth = this.carriages[0].maxHealth;
+    this.prologue.engineRepaired = true;
+    this.completedObjectives.push('repaired_shunter_pipe');
+    this.storyDecisions['engine_repaired'] = true;
+    soundManager.playClick();
+    this.triggerStorySave('Hàn ống hơi đầu máy - Đã bảo trì Shunter #04');
+
+    this.addNotification({
+      title: 'BẢO TRÌ HOÀN TẤT!',
+      details: 'Ống hơi đã được hàn kín! Áp suất xi-lanh hồi phục 100%.',
+      type: 'craft',
+    });
+
+    // Ambush by raiders!
+    this.prologue.step = 'raider_ambush';
+    this.enemies = [
+      {
+        id: 'raider_01',
+        type: 'Chaser',
+        x: -3.8,
+        y: 0.2,
+        z: 4.0,
+        health: 30,
+        maxHealth: 30,
+        speed: 12,
+        targetCarriageIndex: 0,
+        isAttached: false,
+        attackTimer: 0,
+        damagePerHit: 6,
+      },
+      {
+        id: 'raider_02',
+        type: 'HullBreaker',
+        x: 4.5,
+        y: 0.2,
+        z: -4.0,
+        health: 45,
+        maxHealth: 45,
+        speed: 8,
+        targetCarriageIndex: 1,
+        isAttached: false,
+        attackTimer: 0,
+        damagePerHit: 10,
+      },
+      {
+        id: 'raider_03',
+        type: 'Chaser',
+        x: -4.2,
+        y: 0.2,
+        z: -12.0,
+        health: 30,
+        maxHealth: 30,
+        speed: 14,
+        targetCarriageIndex: 1,
+        isAttached: false,
+        attackTimer: 0,
+        damagePerHit: 6,
+      },
+    ];
+
+    soundManager.playAlarm();
+    this.addNotification({
+      title: 'CẢNH BÁO: BỌN CƯỚP TẤN CÔNG!',
+      details: 'Tiếng nổ máy thu hút bọn cướp phế liệu! Tiêu diệt 3 kẻ địch bảo vệ đoàn tàu!',
+      type: 'warning',
+    });
+  }
+
+  public onRaiderDefeated() {
+    if (!this.prologue.isActive || this.prologue.step !== 'raider_ambush') return;
+    this.prologue.raidersDefeated++;
+    if (this.prologue.raidersDefeated >= 3) {
+      this.prologue.step = 'depart_to_settlement';
+      this.completedObjectives.push('raiders_ambush_defeated');
+      this.storyDecisions['depot_ambush_survived'] = true;
+      soundManager.playHorn();
+      this.triggerStorySave('Đẩy lùi đợt phục kích của bọn cướp kho ga');
+      this.addNotification({
+        title: 'ĐÃ ĐẨY LÙI BỌN CƯỚP!',
+        details: 'Mau vào cabin kéo cần ga để RỜI KHỎI KHO GA hướng về Tiền Đồn Haven!',
+        type: 'station',
+      });
+    }
+  }
+
+  public completePrologue() {
+    this.prologue.isActive = false;
+    this.currentChapter = 'Chapter1';
+    this.completedObjectives.push('prologue_completed');
+    this.storyDecisions['haven_sentry_greeted'] = true;
+    this.trainStats.nextStationDistance = 10.0;
+    this.triggerStorySave('Hoàn thành Mở Đầu - Bắt đầu Chương 1: The Last Departure');
+    this.addNotification({
+      title: 'CHÀO MỪNG ĐẾN GIAI ĐOẠN 2',
+      details: 'Đã mở khóa toàn bộ hệ thống nâng cấp toa tàu và hành trình bất tận',
+      type: 'station',
+    });
+  }
+
 
   public recalculateTrainStats() {
     let weight = 0;
@@ -396,6 +757,8 @@ export class GameEngine {
 
   public update(delta: number) {
     if (this.gameState === 'GameOver' || this.gameState === 'Paused') return;
+
+    this.playtimeSeconds += delta;
 
     // Prune expired notifications (> 5.5s)
     const now = Date.now();
@@ -567,7 +930,25 @@ export class GameEngine {
     const kmTraveled = (ts.currentSpeed * delta) / 3600;
     ts.distanceTraveled += kmTraveled;
 
-    if (!this.currentStation) {
+    if (this.prologue.isActive) {
+      if (this.prologue.step === 'depart_to_settlement' && ts.currentSpeed > 0) {
+        this.prologue.settlementDistanceKm = Math.max(0, this.prologue.settlementDistanceKm - kmTraveled);
+        ts.nextStationDistance = this.prologue.settlementDistanceKm;
+        if (this.prologue.settlementDistanceKm <= 0.04) {
+          ts.currentSpeed = 0;
+          ts.targetSpeed = 0;
+          ts.throttle = 0;
+          ts.state = 'Stationary';
+          this.prologue.step = 'prologue_complete';
+          soundManager.playHorn();
+          this.addNotification({
+            title: 'ĐÃ ĐẾN TIỀN ĐỒN HAVEN!',
+            details: 'Ánh đèn pha tiền đồn rọi sáng đoàn tàu. Hành trình mở đầu hoàn tất!',
+            type: 'station',
+          });
+        }
+      }
+    } else if (!this.currentStation) {
       ts.nextStationDistance = Math.max(0, ts.nextStationDistance - kmTraveled);
       if (ts.nextStationDistance <= 0.05 && ts.currentSpeed <= 25) {
         // Arrive at Station!
@@ -721,6 +1102,7 @@ export class GameEngine {
     };
 
     soundManager.playHorn();
+    this.triggerCheckpointSave(`Cập bến an toàn tại ${this.currentStation.name}`);
 
     this.addNotification({
       title: 'Đã Cập Trạm Phế Tích',
@@ -771,6 +1153,7 @@ export class GameEngine {
     this.trainStats.nextStationDistance = 12.0; // Next station 12km out
     this.setThrottle(50);
     soundManager.playHorn();
+    this.triggerCheckpointSave('Rời trạm tiền đồn an toàn');
     this.addNotification({
       title: 'Đoàn Tàu Đã Rời Trạm',
       details: 'Tiếp tục hành trình xuyên vùng đất hoang',
@@ -830,27 +1213,34 @@ export class GameEngine {
   }
 
   private updateEnemies(delta: number) {
-    if (this.trainStats.currentSpeed < 5) return; // Chasers chase moving train
+    if (this.prologue.isActive) {
+      if (this.prologue.step !== 'raider_ambush') {
+        this.enemies = [];
+        return;
+      }
+    } else {
+      if (this.trainStats.currentSpeed < 5) return; // Chasers chase moving train
 
-    this.enemySpawnTimer += delta;
-    if (this.enemySpawnTimer > 14 && this.enemies.length < 5) {
-      this.enemySpawnTimer = 0;
-      // Spawn chaser alongside train (Z: behind train, running to catch up)
-      const side = Math.random() > 0.5 ? 4.5 : -4.5;
-      this.enemies.push({
-        id: 'chaser_' + Math.floor(Math.random() * 10000),
-        type: 'Chaser',
-        x: side,
-        y: 0.2,
-        z: -35 - Math.random() * 20,
-        health: 40,
-        maxHealth: 40,
-        speed: 18 + Math.random() * 4,
-        targetCarriageIndex: 2, // Attacks Defense or Storage car
-        isAttached: false,
-        attackTimer: 0,
-        damagePerHit: 8,
-      });
+      this.enemySpawnTimer += delta;
+      if (this.enemySpawnTimer > 14 && this.enemies.length < 5) {
+        this.enemySpawnTimer = 0;
+        // Spawn chaser alongside train (Z: behind train, running to catch up)
+        const side = Math.random() > 0.5 ? 4.5 : -4.5;
+        this.enemies.push({
+          id: 'chaser_' + Math.floor(Math.random() * 10000),
+          type: 'Chaser',
+          x: side,
+          y: 0.2,
+          z: -35 - Math.random() * 20,
+          health: 40,
+          maxHealth: 40,
+          speed: 18 + Math.random() * 4,
+          targetCarriageIndex: 1, // Attacks Passenger car
+          isAttached: false,
+          attackTimer: 0,
+          damagePerHit: 8,
+        });
+      }
     }
 
     // Update enemy movement towards train
@@ -945,6 +1335,9 @@ export class GameEngine {
       soundManager.playHitImpact();
       if (e.health <= 0) {
         this.enemies.splice(i, 1);
+        if (this.prologue.isActive) {
+          this.onRaiderDefeated();
+        }
       }
       break;
     }
@@ -968,6 +1361,9 @@ export class GameEngine {
       if (idx !== -1) {
         this.enemies.splice(idx, 1);
         soundManager.playHitImpact();
+        if (this.prologue.isActive) {
+          this.onRaiderDefeated();
+        }
       }
     }
   }
@@ -1231,5 +1627,154 @@ export class GameEngine {
 
   public debugTriggerHazard() {
     this.spawnTrackHazard();
+  }
+
+  // Phase 2: Save, Load, and Checkpoints System
+  public async saveToSlot(
+    slotId: string,
+    saveType: SaveType = 'manual'
+  ): Promise<{ success: boolean; error?: string }> {
+    const res = await SaveManager.saveSlot(slotId, this, saveType);
+    if (res.success) {
+      this.activeSaveSlot = slotId;
+      const slotLabel = slotId === 'slot_auto' ? 'Auto-Save Checkpoint' : slotId.toUpperCase().replace('_', ' ');
+      this.addNotification({
+        title: 'LƯU TRỮ THÀNH CÔNG',
+        details: `Đã lưu trạng thái vào ${slotLabel} (Chương: ${this.currentChapter})`,
+        type: 'station',
+      });
+    }
+    return res;
+  }
+
+  public async loadFromSlot(
+    slotId: string
+  ): Promise<{ success: boolean; error?: string }> {
+    const res = await SaveManager.loadSlot(slotId, this);
+    if (res.success) {
+      this.activeSaveSlot = slotId;
+      this.addNotification({
+        title: 'NẠP DỮ LIỆU THÀNH CÔNG',
+        details: `Đã khôi phục hành trình từ ${slotId.toUpperCase()}!`,
+        type: 'loot',
+      });
+    }
+    return res;
+  }
+
+  public async triggerCheckpointSave(reason: string = 'Safe Checkpoint') {
+    try {
+      await SaveManager.saveSlot('slot_auto', this, 'auto_checkpoint');
+      this.addNotification({
+        title: 'ĐIỂM LƯU TỰ ĐỘNG AN TOÀN',
+        details: reason,
+        type: 'station',
+      });
+    } catch (err) {
+      console.warn('[GameEngine] Checkpoint save error', err);
+    }
+  }
+
+  public async triggerStorySave(storyEvent: string) {
+    try {
+      await SaveManager.saveSlot('slot_auto', this, 'story_event');
+      this.addNotification({
+        title: 'LƯU TIẾN TRÌNH CỐT TRUYỆN',
+        details: storyEvent,
+        type: 'craft',
+      });
+    } catch (err) {
+      console.warn('[GameEngine] Story save error', err);
+    }
+  }
+
+  public saveGameToStorage(): boolean {
+    try {
+      SaveManager.saveSlot(this.activeSaveSlot || 'slot_1', this, 'manual');
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  public loadGameFromStorage(): boolean {
+    try {
+      // First attempt to load from active slot or slot_1
+      SaveManager.loadSlot(this.activeSaveSlot || 'slot_1', this);
+
+      // Also read from legacy storage if available
+      const raw = localStorage.getItem('last_track_save_v1');
+      if (raw) {
+        const data = JSON.parse(raw);
+        if (data.trainStats) this.trainStats = { ...this.trainStats, ...data.trainStats };
+        if (data.playerStats) this.playerStats = { ...this.playerStats, ...data.playerStats };
+        if (data.carriages) this.carriages = data.carriages;
+        if (data.inventory) this.inventory = data.inventory;
+        if (data.storage) this.storage = data.storage;
+        if (data.turret) this.turret = { ...this.turret, ...data.turret };
+        if (data.currentWeather) this.currentWeather = data.currentWeather;
+        if (data.prologue) this.prologue = data.prologue;
+        if (data.chapter) this.currentChapter = data.chapter;
+        if (data.playtimeSeconds) this.playtimeSeconds = data.playtimeSeconds;
+        this.recalculateTrainStats();
+        return true;
+      }
+      return false;
+    } catch {
+      return false;
+    }
+  }
+
+  public static hasSavedGame(): boolean {
+    try {
+      // Check legacy key or any slot in localStorage
+      for (let i = 0; i < localStorage.length; i++) {
+        const k = localStorage.key(i);
+        if (k && (k.startsWith('last_track_slot_') || k === 'last_track_save_v1')) {
+          return true;
+        }
+      }
+      return false;
+    } catch {
+      return false;
+    }
+  }
+
+  public static getSavedGameMetadata(): { savedAt: number; distance: number; carriagesCount: number; fuel: number } | null {
+    try {
+      // Find latest slot in localStorage
+      let latest: any = null;
+      for (const slotKey of ['slot_auto', 'slot_1', 'slot_2', 'slot_3']) {
+        const raw = localStorage.getItem(`last_track_slot_${slotKey}`);
+        if (raw) {
+          try {
+            const parsed = JSON.parse(raw);
+            if (!latest || (parsed.savedAt && parsed.savedAt > latest.savedAt)) {
+              latest = parsed;
+            }
+          } catch {
+            // ignore
+          }
+        }
+      }
+
+      if (!latest) {
+        const rawLegacy = localStorage.getItem('last_track_save_v1');
+        if (rawLegacy) {
+          latest = JSON.parse(rawLegacy);
+        }
+      }
+
+      if (!latest) return null;
+
+      return {
+        savedAt: latest.savedAt || Date.now(),
+        distance: latest.trainStats?.distanceTraveled || 0,
+        carriagesCount: latest.carriages?.length || 2,
+        fuel: Math.round(latest.trainStats?.currentFuel || 0),
+      };
+    } catch {
+      return null;
+    }
   }
 }

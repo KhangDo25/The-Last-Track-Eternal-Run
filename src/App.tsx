@@ -23,7 +23,17 @@ import {
   CloudSnow,
   CloudRain,
   Sparkles,
+  Menu,
+  Save,
+  Pause,
+  Settings,
 } from 'lucide-react';
+import { MainMenu } from './components/MainMenu';
+import { SaveLoadModal } from './components/SaveLoadModal';
+import { PauseMenuModal } from './components/PauseMenuModal';
+import { SettingsModal } from './components/SettingsModal';
+import { SaveManager } from './game/saveManager';
+import { SettingsManager } from './utils/settingsManager';
 
 export default function App() {
   const [engine] = useState(() => new GameEngine());
@@ -37,11 +47,17 @@ export default function App() {
   // Dynamic Weather state
   const [currentWeather, setCurrentWeather] = useState<WeatherType>('blizzard');
 
+  // CRT Filter visual setting
+  const [crtFilter, setCrtFilter] = useState<boolean>(() => SettingsManager.getSettings().crtFilter);
+
   // View switch: 'Game' | 'UnityCode'
   const [currentView, setCurrentView] = useState<'Game' | 'UnityCode'>('Game');
 
-  // Modals
-  const [activeModal, setActiveModal] = useState<'None' | 'Throttle' | 'Workbench' | 'Storage' | 'Debug'>('None');
+  const [activeModal, setActiveModal] = useState<
+    'None' | 'Throttle' | 'Workbench' | 'Storage' | 'Debug' | 'SaveLoad' | 'Pause' | 'Settings'
+  >('None');
+  const [modalReturnTarget, setModalReturnTarget] = useState<'None' | 'Pause'>('None');
+  const [saveLoadInitialMode, setSaveLoadInitialMode] = useState<'save' | 'load'>('save');
   const [isAudioMuted, setIsAudioMuted] = useState(false);
   const [gameStarted, setGameStarted] = useState(false);
   const [interactTarget, setInteractTarget] = useState<InteractionTarget | null>(null);
@@ -49,12 +65,30 @@ export default function App() {
   const [playerPos, setPlayerPos] = useState({ x: 0, y: 1.6, z: 6 });
   const [, setFrameTick] = useState<number>(0);
 
+  // Keep ref for activeModal so requestAnimationFrame loop reads current state without tearing down scene
+  const activeModalRef = useRef(activeModal);
+  activeModalRef.current = activeModal;
+
   // Sync scene language when state changes
   useEffect(() => {
     if (gameSceneRef.current) {
       gameSceneRef.current.language = language;
     }
   }, [language]);
+
+  // Subscribe to persistent settings changes
+  useEffect(() => {
+    const unsub = SettingsManager.subscribe((s) => {
+      setCrtFilter(s.crtFilter);
+      if (gameSceneRef.current) {
+        gameSceneRef.current.applySettings({
+          pixelArtScaling: s.pixelArtScaling,
+          screenShake: s.screenShake,
+        });
+      }
+    });
+    return unsub;
+  }, []);
 
   const handleToggleWeather = () => {
     if (gameSceneRef.current) {
@@ -68,8 +102,19 @@ export default function App() {
   useEffect(() => {
     if (!canvasContainerRef.current) return;
 
-    const scene = new GameScene(canvasContainerRef.current);
+    const scene = new GameScene(canvasContainerRef.current, engine);
     scene.language = language;
+
+    // Apply initial persistent settings to scene and audio
+    const initialSettings = SettingsManager.getSettings();
+    scene.applySettings({
+      pixelArtScaling: initialSettings.pixelArtScaling,
+      screenShake: initialSettings.screenShake,
+    });
+    soundManager.setMasterVolume(initialSettings.masterVolume);
+    soundManager.setMusicVolume(initialSettings.musicVolume);
+    soundManager.setSfxVolume(initialSettings.sfxVolume);
+
     scene.onWeatherChange = (w) => {
       setCurrentWeather(w);
       if (engine.currentWeather !== w) {
@@ -101,30 +146,37 @@ export default function App() {
       lastTime = time;
 
       if (gameStarted) {
-        // Step engine physics & game loop
-        engine.update(dt);
+        const isPaused = activeModalRef.current === 'Pause' || engine.gameState === 'Paused';
 
-        // Update station visuals
-        if (engine.currentStation) {
-          scene.setStationVisible(true);
+        if (!isPaused) {
+          // Step engine physics & game loop
+          engine.update(dt);
+
+          // Update station visuals
+          if (engine.currentStation) {
+            scene.setStationVisible(true);
+          } else {
+            scene.setStationVisible(false);
+          }
+
+          // Synchronize enemies
+          scene.updateEnemies(engine.enemies);
+
+          // Update 3D render
+          scene.update(dt, engine.trainStats.currentSpeed, engine.turret);
+
+          // Update HUD state
+          setInteractTarget(scene.currentInteractable);
+          setIsMounted(scene.isMountedToTurret);
+          setPlayerPos({
+            x: scene.playerPos.x,
+            y: scene.playerPos.y,
+            z: scene.playerPos.z,
+          });
         } else {
-          scene.setStationVisible(false);
+          // When paused: render static scene without ticking physics, enemies, weather, or timers!
+          scene.update(0, 0, engine.turret);
         }
-
-        // Synchronize enemies
-        scene.updateEnemies(engine.enemies);
-
-        // Update 3D render
-        scene.update(dt, engine.trainStats.currentSpeed, engine.turret);
-
-        // Update HUD state
-        setInteractTarget(scene.currentInteractable);
-        setIsMounted(scene.isMountedToTurret);
-        setPlayerPos({
-          x: scene.playerPos.x,
-          y: scene.playerPos.y,
-          z: scene.playerPos.z,
-        });
       }
 
       setFrameTick((tick: number) => tick + 1);
@@ -145,7 +197,7 @@ export default function App() {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.code === 'F1') {
         e.preventDefault();
-        setActiveModal((prev: 'None' | 'Throttle' | 'Workbench' | 'Storage' | 'Debug') => (prev === 'Debug' ? 'None' : 'Debug'));
+        setActiveModal((prev) => (prev === 'Debug' ? 'None' : 'Debug'));
       } else if (e.code === 'F2') {
         e.preventDefault();
         engine.debugAddFuel();
@@ -157,7 +209,7 @@ export default function App() {
         engine.debugSpawnEnemy();
       } else if (e.code === 'F5') {
         e.preventDefault();
-        engine.debugDamageTrain();
+        engine.saveToSlot('slot_1', 'manual');
       } else if (e.code === 'F6') {
         e.preventDefault();
         engine.debugRepairTrain();
@@ -167,22 +219,41 @@ export default function App() {
       } else if (e.code === 'F8') {
         e.preventDefault();
         engine.debugTriggerStation();
-      } else if (e.code === 'Escape') {
-        if (activeModal !== 'None') {
-          setActiveModal('None');
-        } else if (isMounted && gameSceneRef.current) {
-          gameSceneRef.current.isMountedToTurret = false;
+      } else {
+        const pauseKey = SettingsManager.getSettings().controls.pause || 'Escape';
+        if (e.code === 'Escape' || e.code === 'KeyP' || e.code === pauseKey) {
+          if (!gameStarted) return;
+          e.preventDefault();
+          if (activeModal === 'Pause') {
+            engine.gameState = 'Playing';
+            soundManager.resumeAudio();
+            setActiveModal('None');
+          } else if (activeModal !== 'None') {
+            if (modalReturnTarget === 'Pause') {
+              setActiveModal('Pause');
+            } else {
+              setActiveModal('None');
+            }
+          } else if (isMounted && gameSceneRef.current && e.code === 'Escape') {
+            gameSceneRef.current.isMountedToTurret = false;
+          } else {
+            engine.gameState = 'Paused';
+            soundManager.pauseAudio();
+            setModalReturnTarget('None');
+            setActiveModal('Pause');
+          }
         }
       }
     };
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [engine, activeModal, isMounted]);
+  }, [engine, activeModal, isMounted, gameStarted, modalReturnTarget]);
 
   // Handle manual turret firing with Left Click
   useEffect(() => {
     const handleMouseDown = (e: MouseEvent) => {
+      if (activeModalRef.current !== 'None' || engine.gameState === 'Paused') return;
       if (e.button === 0 && isMounted && gameSceneRef.current) {
         const fired = engine.fireTurretManual({ x: 0, y: 0, z: -1 });
         if (fired) {
@@ -198,10 +269,36 @@ export default function App() {
     return () => window.removeEventListener('mousedown', handleMouseDown);
   }, [isMounted, engine]);
 
-  const handleStartGame = () => {
+  const handleStartNewGame = async (skipIntro = false) => {
+    engine.setupPrologue();
+    if (skipIntro) {
+      engine.advancePrologueCutscene();
+    }
     soundManager.startEngineSound();
     soundManager.playHorn();
+    await engine.saveToSlot('slot_1', 'manual');
     setGameStarted(true);
+  };
+
+  const handleContinueGame = async () => {
+    const latest = await SaveManager.getLatestValidSave();
+    if (latest) {
+      const res = await engine.loadFromSlot(latest.slotId);
+      if (res.success) {
+        soundManager.startEngineSound();
+        soundManager.playHorn();
+        setGameStarted(true);
+        return;
+      }
+    }
+    const loaded = engine.loadGameFromStorage();
+    if (loaded) {
+      soundManager.startEngineSound();
+      soundManager.playHorn();
+      setGameStarted(true);
+    } else {
+      handleStartNewGame(false);
+    }
   };
 
   const handleToggleMute = () => {
@@ -300,6 +397,49 @@ export default function App() {
             {isAudioMuted ? <VolumeX className="w-4 h-4" /> : <Volume2 className="w-4 h-4 text-amber-400" />}
           </button>
 
+          {gameStarted && (
+            <button
+              onClick={() => {
+                setSaveLoadInitialMode('save');
+                setModalReturnTarget('None');
+                setActiveModal('SaveLoad');
+              }}
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-zinc-900 hover:bg-zinc-800 border border-amber-500/40 text-amber-400 hover:text-amber-300 rounded-lg transition-colors cursor-pointer font-bold"
+              title={language === 'vi' ? 'Lưu / Nạp Game (3 Slot Chiến Dịch)' : 'Save / Load Game'}
+            >
+              <Save className="w-3.5 h-3.5" />
+              <span className="hidden md:inline">{language === 'vi' ? 'Lưu / Nạp' : 'Save / Load'}</span>
+            </button>
+          )}
+
+          {gameStarted && (
+            <button
+              onClick={() => {
+                engine.gameState = 'Paused';
+                soundManager.pauseAudio();
+                setModalReturnTarget('None');
+                setActiveModal('Pause');
+              }}
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-zinc-300 hover:text-white rounded-lg transition-colors cursor-pointer font-bold"
+              title={language === 'vi' ? 'Tạm Dừng / Menu Hệ Thống [ESC / P]' : 'Pause Game / Menu [ESC / P]'}
+            >
+              <Pause className="w-3.5 h-3.5 text-amber-400" />
+              <span className="hidden md:inline">{language === 'vi' ? 'Tạm Dừng' : 'Pause'}</span>
+            </button>
+          )}
+
+          <button
+            onClick={() => {
+              setModalReturnTarget(activeModal === 'Pause' ? 'Pause' : 'None');
+              setActiveModal('Settings');
+            }}
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-zinc-300 hover:text-white rounded-lg transition-colors cursor-pointer font-bold"
+            title={language === 'vi' ? 'Cài Đặt Hệ Thống' : 'System Settings'}
+          >
+            <Settings className="w-3.5 h-3.5 text-cyan-400" />
+            <span className="hidden md:inline">{language === 'vi' ? 'Cài Đặt' : 'Settings'}</span>
+          </button>
+
           <button
             onClick={() => setActiveModal('Debug')}
             className="flex items-center gap-1.5 px-3 py-1.5 bg-zinc-900 border border-zinc-800 text-zinc-300 hover:text-white rounded-lg transition-colors cursor-pointer"
@@ -338,63 +478,33 @@ export default function App() {
               language={language}
               currentWeather={currentWeather}
               onToggleWeather={handleToggleWeather}
+              onOpenPause={() => {
+                engine.gameState = 'Paused';
+                soundManager.pauseAudio();
+                setModalReturnTarget('None');
+                setActiveModal('Pause');
+              }}
+              onOpenSave={() => {
+                setSaveLoadInitialMode('save');
+                setModalReturnTarget('None');
+                setActiveModal('SaveLoad');
+              }}
+              onOpenSettings={() => {
+                setModalReturnTarget('None');
+                setActiveModal('Settings');
+              }}
             />
           )}
 
-          {/* Initial Start Modal */}
+          {/* Atmospheric Opening Sequence & Main Menu */}
           {!gameStarted && (
-            <div className="absolute inset-0 bg-zinc-950/90 backdrop-blur-md flex items-center justify-center p-6 z-30 font-mono">
-              <div className="bg-zinc-900/95 border border-zinc-800 rounded-2xl max-w-xl w-full p-8 shadow-2xl text-center space-y-6">
-                <div className="space-y-3">
-                  <div className="inline-flex p-3 bg-amber-500/10 border border-amber-500/30 rounded-2xl text-amber-400 mb-1">
-                    <Flame className="w-8 h-8" />
-                  </div>
-                  <h2 className="text-2xl font-extrabold tracking-tight text-zinc-100 uppercase">
-                    {t.introTitle}
-                  </h2>
-                  <p className="text-xs text-zinc-400 leading-relaxed max-w-lg mx-auto">
-                    {t.introDesc}
-                  </p>
-                </div>
-
-                <div className="grid grid-cols-2 gap-3 text-[11px] text-zinc-400 bg-zinc-950/80 p-4 rounded-xl border border-zinc-800/80 text-left">
-                  <div className="space-y-1">
-                    <span className="text-zinc-500 block uppercase text-[10px] font-bold">
-                      {t.introControlsHeading}
-                    </span>
-                    <div>{t.introControlsMove}</div>
-                    <div>{t.introControlsLook}</div>
-                    <div>{t.introControlsSprint}</div>
-                  </div>
-                  <div className="space-y-1">
-                    <span className="text-zinc-500 block uppercase text-[10px] font-bold">
-                      {t.introActionsHeading}
-                    </span>
-                    <div className="text-amber-300/90">{t.introActionsInteract}</div>
-                    <div className="text-amber-300/90">{t.introActionsFire}</div>
-                    <div>{t.introActionsDebug}</div>
-                  </div>
-                </div>
-
-                <div className="flex items-center justify-between pt-2">
-                  <button
-                    onClick={() => setLanguage((l) => (l === 'vi' ? 'en' : 'vi'))}
-                    className="flex items-center gap-1.5 px-3 py-2 bg-zinc-800 hover:bg-zinc-700 text-xs text-zinc-300 rounded-xl transition-colors cursor-pointer"
-                  >
-                    <Languages className="w-4 h-4 text-amber-400" />
-                    <span>{language === 'vi' ? 'English Version' : 'Phiên Bản Tiếng Việt'}</span>
-                  </button>
-
-                  <button
-                    onClick={handleStartGame}
-                    className="px-6 py-3.5 bg-amber-500 hover:bg-amber-400 text-zinc-950 font-extrabold text-xs uppercase tracking-wider rounded-xl transition-all shadow-[0_0_25px_rgba(245,158,11,0.35)] flex items-center gap-2 cursor-pointer"
-                  >
-                    <Play className="w-4 h-4 fill-zinc-950" />
-                    {t.introStartBtn}
-                  </button>
-                </div>
-              </div>
-            </div>
+            <MainMenu
+              language={language}
+              onSetLanguage={setLanguage}
+              onStartNewGame={handleStartNewGame}
+              onContinueGame={handleContinueGame}
+              engine={engine}
+            />
           )}
 
           {/* Game Over Modal */}
@@ -459,6 +569,74 @@ export default function App() {
           onClose={() => setActiveModal('None')}
           onRefresh={() => setFrameTick((tick: number) => tick + 1)}
           language={language}
+        />
+      )}
+
+      {activeModal === 'Pause' && (
+        <PauseMenuModal
+          engine={engine}
+          onResume={() => {
+            engine.gameState = 'Playing';
+            soundManager.resumeAudio();
+            setActiveModal('None');
+          }}
+          onOpenSave={() => {
+            setSaveLoadInitialMode('save');
+            setModalReturnTarget('Pause');
+            setActiveModal('SaveLoad');
+          }}
+          onOpenLoad={() => {
+            setSaveLoadInitialMode('load');
+            setModalReturnTarget('Pause');
+            setActiveModal('SaveLoad');
+          }}
+          onOpenSettings={() => {
+            setModalReturnTarget('Pause');
+            setActiveModal('Settings');
+          }}
+          onReturnToMainMenu={async (saveFirst) => {
+            if (saveFirst) {
+              await engine.saveToSlot('slot_auto', 'auto_checkpoint');
+            }
+            soundManager.pauseAudio();
+            engine.gameState = 'Playing';
+            setGameStarted(false);
+            setActiveModal('None');
+          }}
+          language={language}
+        />
+      )}
+
+      {activeModal === 'SaveLoad' && (
+        <SaveLoadModal
+          engine={engine}
+          initialMode={saveLoadInitialMode}
+          onClose={() => setActiveModal(modalReturnTarget)}
+          onLoaded={() => {
+            engine.gameState = 'Playing';
+            soundManager.startEngineSound();
+            soundManager.resumeAudio();
+            setGameStarted(true);
+            setActiveModal('None');
+          }}
+          language={language}
+        />
+      )}
+
+      {activeModal === 'Settings' && (
+        <SettingsModal
+          onClose={() => setActiveModal(modalReturnTarget)}
+          language={language}
+          onLanguageChange={setLanguage}
+          onApplySettings={(s) => {
+            setCrtFilter(s.crtFilter);
+            if (gameSceneRef.current) {
+              gameSceneRef.current.applySettings({
+                pixelArtScaling: s.pixelArtScaling,
+                screenShake: s.screenShake,
+              });
+            }
+          }}
         />
       )}
     </div>
