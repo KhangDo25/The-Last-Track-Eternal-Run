@@ -12,24 +12,30 @@ class SoundManager {
   private sfxGain: GainNode | null = null;
 
   private initContext() {
-    if (!this.ctx) {
-      const AudioCtx = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
-      this.ctx = new AudioCtx();
+    try {
+      if (!this.ctx) {
+        if (typeof window === 'undefined') return;
+        const AudioCtx = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+        if (!AudioCtx) return;
+        this.ctx = new AudioCtx();
 
-      this.masterGain = this.ctx.createGain();
-      this.masterGain.gain.setValueAtTime(this.isMuted ? 0 : this.masterVolume, this.ctx.currentTime);
-      this.masterGain.connect(this.ctx.destination);
+        this.masterGain = this.ctx.createGain();
+        this.masterGain.gain.setValueAtTime(this.isMuted ? 0 : this.masterVolume, this.ctx.currentTime);
+        this.masterGain.connect(this.ctx.destination);
 
-      this.musicGain = this.ctx.createGain();
-      this.musicGain.gain.setValueAtTime(this.musicVolume, this.ctx.currentTime);
-      this.musicGain.connect(this.masterGain);
+        this.musicGain = this.ctx.createGain();
+        this.musicGain.gain.setValueAtTime(this.musicVolume, this.ctx.currentTime);
+        this.musicGain.connect(this.masterGain);
 
-      this.sfxGain = this.ctx.createGain();
-      this.sfxGain.gain.setValueAtTime(this.sfxVolume, this.ctx.currentTime);
-      this.sfxGain.connect(this.masterGain);
-    }
-    if (this.ctx.state === 'suspended') {
-      this.ctx.resume();
+        this.sfxGain = this.ctx.createGain();
+        this.sfxGain.gain.setValueAtTime(this.sfxVolume, this.ctx.currentTime);
+        this.sfxGain.connect(this.masterGain);
+      }
+      if (this.ctx && this.ctx.state === 'suspended') {
+        this.ctx.resume().catch(() => {});
+      }
+    } catch (e) {
+      console.warn('[SoundManager] AudioContext init deferred until user interaction', e);
     }
   }
 

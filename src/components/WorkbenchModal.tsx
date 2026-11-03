@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { GameEngine } from '../game/gameEngine';
-import { Check, Hammer, X } from 'lucide-react';
+import { Check, Hammer, X, Wrench, Crosshair } from 'lucide-react';
 import { Language, TRANSLATIONS } from '../i18n/translations';
 
 interface WorkbenchModalProps {
@@ -12,7 +12,7 @@ interface WorkbenchModalProps {
 export const WorkbenchModal: React.FC<WorkbenchModalProps> = ({ engine, onClose, language }) => {
   const t = TRANSLATIONS[language];
   const [activeTab, setActiveTab] = useState<'Upgrades' | 'Crafting'>('Upgrades');
-  const [selectedCarriageId, setSelectedCarriageId] = useState<string>('car_defense');
+  const [selectedCarriageId, setSelectedCarriageId] = useState<string>(() => engine.carriages[0]?.id || 'car_locomotive');
   const [, setRefresh] = useState(0);
 
   const selectedCar = engine.carriages.find((c) => c.id === selectedCarriageId) || engine.carriages[0];
@@ -96,6 +96,29 @@ export const WorkbenchModal: React.FC<WorkbenchModalProps> = ({ engine, onClose,
                     ))}
                   </div>
 
+                  {/* Carriage Blueprints & Unlocks */}
+                  <div className="pt-2 border-t border-zinc-900 space-y-1.5">
+                    <span className="text-[10px] text-zinc-500 font-bold uppercase tracking-wider block">
+                      {language === 'vi' ? 'Tiến Trình Mở Khóa Toa Tàu' : 'Carriage Blueprints'}
+                    </span>
+                    <div className="text-[11px] p-2 bg-zinc-900/60 rounded-lg border border-zinc-800 space-y-1">
+                      <div className="flex justify-between items-center">
+                        <span className="font-semibold text-zinc-300">Toa Xưởng Cơ Khí</span>
+                        <span className={`text-[10px] font-bold ${engine.chapter1?.workshopCarriageEarned ? 'text-emerald-400' : 'text-amber-400'}`}>
+                          {engine.chapter1?.workshopCarriageEarned ? (language === 'vi' ? '✓ Đã Gắn' : '✓ Coupled') : (language === 'vi' ? 'Cứu Mara (Ch. I)' : 'Mara Quest')}
+                        </span>
+                      </div>
+                      <div className="flex justify-between items-center text-zinc-500">
+                        <span>Toa Pháo Gatling</span>
+                        <span className="text-[10px]">Chương II</span>
+                      </div>
+                      <div className="flex justify-between items-center text-zinc-500">
+                        <span>Toa Chứa Hàng</span>
+                        <span className="text-[10px]">Chương II</span>
+                      </div>
+                    </div>
+                  </div>
+
                   {/* Selected Carriage Diagnostics */}
                   <div className="pt-4 border-t border-zinc-800 space-y-2 text-xs">
                     <span className="text-[10px] text-zinc-500 font-bold uppercase block">
@@ -142,6 +165,58 @@ export const WorkbenchModal: React.FC<WorkbenchModalProps> = ({ engine, onClose,
                         ))}
                       </div>
                     )}
+                  </div>
+
+                  {/* Direct Maintenance & Ammo Foundry */}
+                  <div className="pt-3 border-t border-zinc-800 space-y-2">
+                    <div className="flex justify-between items-center text-[10px]">
+                      <span className="font-bold text-zinc-400 uppercase tracking-wider">
+                        {language === 'vi' ? 'Bảo Trì & Đúc Đạn' : 'Quick Foundry'}
+                      </span>
+                      <span className="text-amber-400 font-bold">
+                        {engine.inventory.find((i) => i.id === 'scrap')?.quantity || 0} Scrap
+                      </span>
+                    </div>
+
+                    <button
+                      disabled={
+                        (engine.inventory.find((i) => i.id === 'scrap')?.quantity || 0) < 10 ||
+                        selectedCar.currentHealth >= selectedCar.maxHealth
+                      }
+                      onClick={() => {
+                        engine.repairCarriage(selectedCar.id);
+                        setRefresh((r) => r + 1);
+                      }}
+                      className={`w-full py-2 px-3 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+                        (engine.inventory.find((i) => i.id === 'scrap')?.quantity || 0) >= 10 &&
+                        selectedCar.currentHealth < selectedCar.maxHealth
+                          ? 'bg-emerald-950 hover:bg-emerald-900 border border-emerald-600/60 text-emerald-300 shadow-md'
+                          : 'bg-zinc-900 border border-zinc-800 text-zinc-600 cursor-not-allowed'
+                      }`}
+                    >
+                      <Wrench className="w-3.5 h-3.5" />
+                      <span>{language === 'vi' ? 'Hàn Toa Này (+50 HP)' : 'Repair Carriage (+50 HP)'}</span>
+                    </button>
+
+                    <button
+                      disabled={
+                        (engine.inventory.find((i) => i.id === 'scrap')?.quantity || 0) < 10 ||
+                        engine.turret.currentAmmo >= engine.turret.maxAmmo
+                      }
+                      onClick={() => {
+                        engine.craftTurretAmmo();
+                        setRefresh((r) => r + 1);
+                      }}
+                      className={`w-full py-2 px-3 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+                        (engine.inventory.find((i) => i.id === 'scrap')?.quantity || 0) >= 10 &&
+                        engine.turret.currentAmmo < engine.turret.maxAmmo
+                          ? 'bg-cyan-950 hover:bg-cyan-900 border border-cyan-600/60 text-cyan-300 shadow-md'
+                          : 'bg-zinc-900 border border-zinc-800 text-zinc-600 cursor-not-allowed'
+                      }`}
+                    >
+                      <Crosshair className="w-3.5 h-3.5" />
+                      <span>{language === 'vi' ? 'Đúc Đạn Súng (+50 Viên)' : 'Cast Turret Ammo (+50)'}</span>
+                    </button>
                   </div>
                 </div>
               </div>

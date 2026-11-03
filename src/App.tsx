@@ -32,6 +32,10 @@ import { MainMenu } from './components/MainMenu';
 import { SaveLoadModal } from './components/SaveLoadModal';
 import { PauseMenuModal } from './components/PauseMenuModal';
 import { SettingsModal } from './components/SettingsModal';
+import { GameOverModal } from './components/GameOverModal';
+import { CampaignStoryModal } from './components/CampaignStoryModal';
+import { StoryLogModal } from './components/StoryLogModal';
+import { HelpControlsModal } from './components/HelpControlsModal';
 import { SaveManager } from './game/saveManager';
 import { SettingsManager } from './utils/settingsManager';
 
@@ -54,7 +58,7 @@ export default function App() {
   const [currentView, setCurrentView] = useState<'Game' | 'UnityCode'>('Game');
 
   const [activeModal, setActiveModal] = useState<
-    'None' | 'Throttle' | 'Workbench' | 'Storage' | 'Debug' | 'SaveLoad' | 'Pause' | 'Settings'
+    'None' | 'Throttle' | 'Workbench' | 'Storage' | 'Debug' | 'SaveLoad' | 'Pause' | 'Settings' | 'StoryLog' | 'Help'
   >('None');
   const [modalReturnTarget, setModalReturnTarget] = useState<'None' | 'Pause'>('None');
   const [saveLoadInitialMode, setSaveLoadInitialMode] = useState<'save' | 'load'>('save');
@@ -134,6 +138,10 @@ export default function App() {
       setActiveModal(uiType);
     };
 
+    scene.onHelpToggle = () => {
+      setActiveModal((prev) => (prev === 'Help' ? 'None' : 'Help'));
+    };
+
     scene.onLootAction = (crateId) => {
       engine.lootStationCrate(crateId);
     };
@@ -177,9 +185,10 @@ export default function App() {
           // When paused: render static scene without ticking physics, enemies, weather, or timers!
           scene.update(0, 0, engine.turret);
         }
+
+        setFrameTick((tick: number) => tick + 1);
       }
 
-      setFrameTick((tick: number) => tick + 1);
       animId = requestAnimationFrame(loop);
     };
 
@@ -192,56 +201,74 @@ export default function App() {
     };
   }, [engine, gameStarted]);
 
-  // Handle global F1-F8 keyboard shortcuts per Section 58
+  // Handle keyboard shortcuts
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.code === 'F1') {
-        e.preventDefault();
-        setActiveModal((prev) => (prev === 'Debug' ? 'None' : 'Debug'));
-      } else if (e.code === 'F2') {
-        e.preventDefault();
-        engine.debugAddFuel();
-      } else if (e.code === 'F3') {
-        e.preventDefault();
-        engine.debugAddResources();
-      } else if (e.code === 'F4') {
-        e.preventDefault();
-        engine.debugSpawnEnemy();
-      } else if (e.code === 'F5') {
-        e.preventDefault();
-        engine.saveToSlot('slot_1', 'manual');
-      } else if (e.code === 'F6') {
-        e.preventDefault();
-        engine.debugRepairTrain();
-      } else if (e.code === 'F7') {
-        e.preventDefault();
-        engine.debugToggleGodMode();
-      } else if (e.code === 'F8') {
-        e.preventDefault();
-        engine.debugTriggerStation();
-      } else {
-        const pauseKey = SettingsManager.getSettings().controls.pause || 'Escape';
-        if (e.code === 'Escape' || e.code === 'KeyP' || e.code === pauseKey) {
-          if (!gameStarted) return;
+      // Dev mode shortcuts only
+      if (import.meta.env.DEV) {
+        if (e.code === 'F1') {
           e.preventDefault();
-          if (activeModal === 'Pause') {
-            engine.gameState = 'Playing';
-            soundManager.resumeAudio();
-            setActiveModal('None');
-          } else if (activeModal !== 'None') {
-            if (modalReturnTarget === 'Pause') {
-              setActiveModal('Pause');
-            } else {
-              setActiveModal('None');
-            }
-          } else if (isMounted && gameSceneRef.current && e.code === 'Escape') {
-            gameSceneRef.current.isMountedToTurret = false;
-          } else {
-            engine.gameState = 'Paused';
-            soundManager.pauseAudio();
-            setModalReturnTarget('None');
+          setActiveModal((prev) => (prev === 'Debug' ? 'None' : 'Debug'));
+          return;
+        } else if (e.code === 'F2') {
+          e.preventDefault();
+          engine.debugAddFuel();
+          return;
+        } else if (e.code === 'F3') {
+          e.preventDefault();
+          engine.debugAddResources();
+          return;
+        } else if (e.code === 'F4') {
+          e.preventDefault();
+          engine.debugSpawnEnemy();
+          return;
+        } else if (e.code === 'F5') {
+          e.preventDefault();
+          engine.saveToSlot('slot_1', 'manual');
+          return;
+        } else if (e.code === 'F6') {
+          e.preventDefault();
+          engine.debugRepairTrain();
+          return;
+        } else if (e.code === 'F7') {
+          e.preventDefault();
+          engine.debugToggleGodMode();
+          return;
+        } else if (e.code === 'F8') {
+          e.preventDefault();
+          engine.debugTriggerStation();
+          return;
+        }
+      }
+
+      if (e.code === 'KeyH') {
+        if (!gameStarted) return;
+        e.preventDefault();
+        setActiveModal((prev) => (prev === 'Help' ? 'None' : 'Help'));
+        return;
+      }
+
+      const pauseKey = SettingsManager.getSettings().controls.pause || 'Escape';
+      if (e.code === 'Escape' || e.code === 'KeyP' || e.code === pauseKey) {
+        if (!gameStarted) return;
+        e.preventDefault();
+        if (activeModal === 'Pause') {
+          engine.gameState = 'Playing';
+          soundManager.resumeAudio();
+          setActiveModal('None');
+        } else if (activeModal !== 'None') {
+          if (modalReturnTarget === 'Pause') {
             setActiveModal('Pause');
+          } else {
+            setActiveModal('None');
           }
+        } else if (isMounted && gameSceneRef.current && e.code === 'Escape') {
+          gameSceneRef.current.isMountedToTurret = false;
+        } else {
+          engine.gameState = 'Paused';
+          soundManager.pauseAudio();
+          setModalReturnTarget('None');
+          setActiveModal('Pause');
         }
       }
     };
@@ -301,6 +328,14 @@ export default function App() {
     }
   };
 
+  const handleResumeLoadedGame = () => {
+    engine.gameState = 'Playing';
+    soundManager.startEngineSound();
+    soundManager.playHorn();
+    setGameStarted(true);
+    setFrameTick((t: number) => t + 1);
+  };
+
   const handleToggleMute = () => {
     const next = !isAudioMuted;
     setIsAudioMuted(next);
@@ -313,156 +348,26 @@ export default function App() {
 
   return (
     <div className="relative w-screen h-screen bg-zinc-950 text-zinc-100 flex flex-col overflow-hidden font-sans">
-      {/* Universal Top Bar Contract (Section 2) */}
-      <header className="h-14 border-b border-zinc-800 bg-zinc-950/90 backdrop-blur-md px-6 flex items-center justify-between z-40 select-none">
-        {/* Zone 1: Single text wordmark */}
-        <div className="flex items-center gap-3">
-          <div className="w-2.5 h-2.5 rounded-full bg-amber-500 animate-pulse shadow-[0_0_8px_rgba(245,158,11,0.8)]" />
-          <h1 className="text-sm font-bold tracking-wider uppercase text-zinc-100 font-mono">
-            {t.appTitle}
-          </h1>
-        </div>
-
-        {/* Zone 2: Navigation Links / Segmented View Control */}
-        <nav className="flex items-center gap-1 bg-zinc-900/90 p-1 rounded-xl border border-zinc-800 font-mono text-xs">
+      {/* If view is UnityCode, render a clean header to return to Game */}
+      {currentView === 'UnityCode' && (
+        <header className="h-12 border-b border-zinc-800 bg-zinc-950/90 backdrop-blur-md px-4 flex items-center justify-between z-40 select-none">
+          <div className="flex items-center gap-2 font-mono text-xs">
+            <span className="font-bold text-zinc-100 uppercase">THE LAST TRACK — C# Scripts Reference</span>
+          </div>
           <button
             onClick={() => setCurrentView('Game')}
-            className={`px-3.5 py-1.5 rounded-lg font-bold flex items-center gap-1.5 transition-colors cursor-pointer ${
-              currentView === 'Game'
-                ? 'bg-amber-500 text-zinc-950 shadow-sm'
-                : 'text-zinc-400 hover:text-white'
-            }`}
+            className="px-3 py-1 bg-amber-500 hover:bg-amber-400 text-zinc-950 font-bold text-xs rounded-lg cursor-pointer transition-colors"
           >
-            <Compass className="w-3.5 h-3.5" />
-            {t.view3DGame}
+            ← {language === 'vi' ? 'Trở Lại Trò Chơi' : 'Back to Game'}
           </button>
-
-          <button
-            onClick={() => setCurrentView('UnityCode')}
-            className={`px-3.5 py-1.5 rounded-lg font-bold flex items-center gap-1.5 transition-colors cursor-pointer ${
-              currentView === 'UnityCode'
-                ? 'bg-amber-500 text-zinc-950 shadow-sm'
-                : 'text-zinc-400 hover:text-white'
-            }`}
-          >
-            <Code2 className="w-3.5 h-3.5" />
-            {t.viewUnityCode}
-          </button>
-        </nav>
-
-        {/* Zone 3: Primary Actions */}
-        <div className="flex items-center gap-2 font-mono text-xs">
-          {/* Dynamic Weather Toggle */}
-          <button
-            onClick={handleToggleWeather}
-            className="flex items-center gap-1.5 px-3 py-1.5 bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-zinc-300 hover:text-white rounded-lg transition-colors font-bold cursor-pointer"
-            title={`${t.weather}: ${
-              currentWeather === 'blizzard'
-                ? t.weatherBlizzard
-                : currentWeather === 'rain'
-                ? t.weatherRain
-                : t.weatherClear
-            } (${t.weatherToggleHint})`}
-          >
-            {currentWeather === 'blizzard' && <CloudSnow className="w-3.5 h-3.5 text-cyan-400" />}
-            {currentWeather === 'rain' && <CloudRain className="w-3.5 h-3.5 text-blue-400" />}
-            {currentWeather === 'clear' && <Sparkles className="w-3.5 h-3.5 text-amber-400" />}
-            <span className="hidden md:inline">
-              {currentWeather === 'blizzard'
-                ? t.weatherBlizzard
-                : currentWeather === 'rain'
-                ? t.weatherRain
-                : t.weatherClear}
-            </span>
-            <span className="text-[10px] text-zinc-500 font-normal px-1 py-0.2 rounded bg-zinc-800">
-              [T]
-            </span>
-          </button>
-
-          {/* Language Toggle */}
-          <button
-            onClick={() => setLanguage((l) => (l === 'vi' ? 'en' : 'vi'))}
-            className="flex items-center gap-1 px-2.5 py-1.5 bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-zinc-300 hover:text-white rounded-lg transition-colors font-bold cursor-pointer"
-            title="Chuyển đổi Tiếng Việt / English"
-          >
-            <Languages className="w-3.5 h-3.5 text-amber-400" />
-            <span>{language.toUpperCase()}</span>
-          </button>
-
-          <button
-            onClick={handleToggleMute}
-            className="p-2 bg-zinc-900 border border-zinc-800 text-zinc-400 hover:text-white rounded-lg transition-colors cursor-pointer"
-            title={isAudioMuted ? t.unmuteBtn : t.muteBtn}
-          >
-            {isAudioMuted ? <VolumeX className="w-4 h-4" /> : <Volume2 className="w-4 h-4 text-amber-400" />}
-          </button>
-
-          {gameStarted && (
-            <button
-              onClick={() => {
-                setSaveLoadInitialMode('save');
-                setModalReturnTarget('None');
-                setActiveModal('SaveLoad');
-              }}
-              className="flex items-center gap-1.5 px-3 py-1.5 bg-zinc-900 hover:bg-zinc-800 border border-amber-500/40 text-amber-400 hover:text-amber-300 rounded-lg transition-colors cursor-pointer font-bold"
-              title={language === 'vi' ? 'Lưu / Nạp Game (3 Slot Chiến Dịch)' : 'Save / Load Game'}
-            >
-              <Save className="w-3.5 h-3.5" />
-              <span className="hidden md:inline">{language === 'vi' ? 'Lưu / Nạp' : 'Save / Load'}</span>
-            </button>
-          )}
-
-          {gameStarted && (
-            <button
-              onClick={() => {
-                engine.gameState = 'Paused';
-                soundManager.pauseAudio();
-                setModalReturnTarget('None');
-                setActiveModal('Pause');
-              }}
-              className="flex items-center gap-1.5 px-3 py-1.5 bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-zinc-300 hover:text-white rounded-lg transition-colors cursor-pointer font-bold"
-              title={language === 'vi' ? 'Tạm Dừng / Menu Hệ Thống [ESC / P]' : 'Pause Game / Menu [ESC / P]'}
-            >
-              <Pause className="w-3.5 h-3.5 text-amber-400" />
-              <span className="hidden md:inline">{language === 'vi' ? 'Tạm Dừng' : 'Pause'}</span>
-            </button>
-          )}
-
-          <button
-            onClick={() => {
-              setModalReturnTarget(activeModal === 'Pause' ? 'Pause' : 'None');
-              setActiveModal('Settings');
-            }}
-            className="flex items-center gap-1.5 px-3 py-1.5 bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-zinc-300 hover:text-white rounded-lg transition-colors cursor-pointer font-bold"
-            title={language === 'vi' ? 'Cài Đặt Hệ Thống' : 'System Settings'}
-          >
-            <Settings className="w-3.5 h-3.5 text-cyan-400" />
-            <span className="hidden md:inline">{language === 'vi' ? 'Cài Đặt' : 'Settings'}</span>
-          </button>
-
-          <button
-            onClick={() => setActiveModal('Debug')}
-            className="flex items-center gap-1.5 px-3 py-1.5 bg-zinc-900 border border-zinc-800 text-zinc-300 hover:text-white rounded-lg transition-colors cursor-pointer"
-          >
-            <Bug className="w-3.5 h-3.5 text-red-400" />
-            <span>{t.debugBtn}</span>
-          </button>
-
-          <button
-            onClick={handleResetRun}
-            className="p-2 bg-zinc-900 border border-zinc-800 text-zinc-400 hover:text-white rounded-lg transition-colors cursor-pointer"
-            title={t.resetBtn}
-          >
-            <RotateCcw className="w-4 h-4" />
-          </button>
-        </div>
-      </header>
+        </header>
+      )}
 
       {/* Main View Area */}
       <div className="flex-1 relative overflow-hidden">
         {/* VIEW 1: 3D First-Person Game Viewport */}
         <div className={`w-full h-full relative ${currentView === 'Game' ? 'block' : 'hidden'}`}>
-          <div ref={canvasContainerRef} className="w-full h-full cursor-crosshair" />
+          <div ref={canvasContainerRef} className="absolute inset-0 cursor-crosshair" />
 
           {/* First Person HUD Overlay */}
           {gameStarted && (
@@ -477,7 +382,6 @@ export default function App() {
               }}
               language={language}
               currentWeather={currentWeather}
-              onToggleWeather={handleToggleWeather}
               onOpenPause={() => {
                 engine.gameState = 'Paused';
                 soundManager.pauseAudio();
@@ -493,43 +397,84 @@ export default function App() {
                 setModalReturnTarget('None');
                 setActiveModal('Settings');
               }}
+              onOpenStoryLog={() => {
+                setModalReturnTarget('None');
+                setActiveModal('StoryLog');
+              }}
+              onToggleHelp={() => {
+                setActiveModal((prev) => (prev === 'Help' ? 'None' : 'Help'));
+              }}
+              isAudioMuted={isAudioMuted}
+              onToggleMute={handleToggleMute}
+              onToggleLanguage={() => setLanguage((l) => (l === 'vi' ? 'en' : 'vi'))}
             />
           )}
+
+          {/* Phase 6: Campaign Narrative & Chapter I Interactive Modals */}
+          {gameStarted &&
+            ((engine.prologue.isActive && engine.prologue.dialogueOpen) ||
+              Boolean(engine.chapter1?.dialogueOpen)) && (
+              <CampaignStoryModal
+                engine={engine}
+                language={language}
+                onClose={() => {
+                  engine.closeStoryDialogue();
+                  setFrameTick((t: number) => t + 1);
+                }}
+                onOpenStoryLog={() => {
+                  setModalReturnTarget('None');
+                  setActiveModal('StoryLog');
+                }}
+              />
+            )}
 
           {/* Atmospheric Opening Sequence & Main Menu */}
           {!gameStarted && (
-            <MainMenu
-              language={language}
-              onSetLanguage={setLanguage}
-              onStartNewGame={handleStartNewGame}
-              onContinueGame={handleContinueGame}
-              engine={engine}
-            />
+            <div className="absolute inset-0 z-30">
+              <MainMenu
+                language={language}
+                onSetLanguage={setLanguage}
+                onStartNewGame={handleStartNewGame}
+                onContinueGame={handleContinueGame}
+                onResumeLoadedGame={handleResumeLoadedGame}
+                engine={engine}
+              />
+            </div>
           )}
 
-          {/* Game Over Modal */}
+          {/* Phase 5: Reliable Game-Over & Recovery System */}
           {engine.gameState === 'GameOver' && (
-            <div className="absolute inset-0 bg-red-950/90 backdrop-blur-md flex items-center justify-center p-6 z-50 font-mono">
-              <div className="bg-zinc-950 border border-red-800/80 rounded-2xl max-w-md w-full p-8 shadow-2xl text-center space-y-6">
-                <div className="w-14 h-14 rounded-full bg-red-500/20 border border-red-500 text-red-500 flex items-center justify-center mx-auto text-2xl font-bold shadow-lg">
-                  ☠
-                </div>
-                <div>
-                  <h2 className="text-2xl font-extrabold tracking-tight text-red-400 uppercase">
-                    {t.gameOverTitle}
-                  </h2>
-                  <p className="text-xs text-zinc-400 mt-2 leading-relaxed">
-                    {t.gameOverDesc}
-                  </p>
-                </div>
-                <button
-                  onClick={handleResetRun}
-                  className="w-full py-3.5 bg-red-600 hover:bg-red-500 text-white font-extrabold text-xs uppercase tracking-wider rounded-xl transition-all shadow-lg cursor-pointer"
-                >
-                  {t.restartRunBtn}
-                </button>
-              </div>
-            </div>
+            <GameOverModal
+              engine={engine}
+              language={language}
+              defeatReason={engine.defeatReason}
+              onRetryCheckpoint={async () => {
+                const res = await engine.loadFromSlot('slot_auto');
+                if (res.success) {
+                  soundManager.startEngineSound();
+                } else {
+                  // Fallback to active campaign slot or slot_1
+                  await engine.loadFromSlot(engine.activeSaveSlot || 'slot_1');
+                  soundManager.startEngineSound();
+                }
+                setFrameTick((t: number) => t + 1);
+              }}
+              onOpenLoadModal={() => {
+                setSaveLoadInitialMode('load');
+                setModalReturnTarget('None');
+                setActiveModal('SaveLoad');
+              }}
+              onReturnToMainMenu={() => {
+                engine.gameState = 'MainMenu';
+                setGameStarted(false);
+                soundManager.pauseAudio();
+                setFrameTick((t: number) => t + 1);
+              }}
+              onRestartCampaign={async () => {
+                await handleStartNewGame(false);
+                setFrameTick((t: number) => t + 1);
+              }}
+            />
           )}
         </div>
 
@@ -594,6 +539,10 @@ export default function App() {
             setModalReturnTarget('Pause');
             setActiveModal('Settings');
           }}
+          onOpenStoryLog={() => {
+            setModalReturnTarget('Pause');
+            setActiveModal('StoryLog');
+          }}
           onReturnToMainMenu={async (saveFirst) => {
             if (saveFirst) {
               await engine.saveToSlot('slot_auto', 'auto_checkpoint');
@@ -637,6 +586,22 @@ export default function App() {
               });
             }
           }}
+        />
+      )}
+
+      {activeModal === 'StoryLog' && (
+        <StoryLogModal
+          engine={engine}
+          language={language}
+          onClose={() => setActiveModal(modalReturnTarget)}
+        />
+      )}
+
+      {activeModal === 'Help' && (
+        <HelpControlsModal
+          engine={engine}
+          language={language}
+          onClose={() => setActiveModal('None')}
         />
       )}
     </div>

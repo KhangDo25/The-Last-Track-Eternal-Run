@@ -126,6 +126,7 @@ export class SaveManager {
       turret: { ...engine.turret },
       currentWeather: engine.currentWeather,
       prologue: JSON.parse(JSON.stringify(engine.prologue)),
+      chapter1: engine.chapter1 ? JSON.parse(JSON.stringify(engine.chapter1)) : undefined,
       completedObjectives: [...(engine.completedObjectives || [])],
       storyDecisions: { ...(engine.storyDecisions || {}) },
       resources: {
@@ -290,6 +291,9 @@ export class SaveManager {
       if (data.turret) engine.turret = { ...engine.turret, ...data.turret };
       if (data.currentWeather) engine.currentWeather = data.currentWeather;
       if (data.prologue) engine.prologue = data.prologue;
+      if (data.chapter1) {
+        engine.chapter1 = data.chapter1;
+      }
       if (data.completedObjectives) engine.completedObjectives = data.completedObjectives;
       if (data.storyDecisions) engine.storyDecisions = data.storyDecisions;
       if (data.playtimeSeconds !== undefined) engine.playtimeSeconds = data.playtimeSeconds;
@@ -297,7 +301,19 @@ export class SaveManager {
       if (data.companions && data.companions.length > 0) engine.companions = data.companions;
       if (data.audioLogs && data.audioLogs.length > 0) engine.audioLogs = data.audioLogs;
 
+      // Anti-looping / Idempotence validation: ensure completed cutscenes and dialogue do not re-open incorrectly
+      if (engine.completedObjectives.includes('ch1_mara_recruited') && engine.chapter1) {
+        engine.chapter1.maraRecruited = true;
+        engine.chapter1.dialogueOpen = false;
+        engine.chapter1.activeStoryModal = 'none';
+      }
+      if (engine.completedObjectives.includes('ch1_complete') && engine.chapter1) {
+        engine.chapter1.dialogueOpen = false;
+        engine.chapter1.activeStoryModal = 'none';
+      }
+
       engine.gameState = 'Playing';
+      engine.defeatReason = null;
       engine.recalculateTrainStats();
 
       return { success: true, data };

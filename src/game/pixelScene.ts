@@ -113,6 +113,7 @@ export class GameScene {
   // Callbacks
   public onLootAction?: (crateId: string) => void;
   public onOpenUI?: (uiType: 'Throttle' | 'Workbench' | 'Storage') => void;
+  public onHelpToggle?: () => void;
 
   // Input states
   private keys: Record<string, boolean> = {};
@@ -144,6 +145,7 @@ export class GameScene {
   private turretAngle = 0;
   private turretRecoil = 0;
   private muzzleFlashTimer = 0;
+  private fireCooldown = 0;
 
   // Procedural Sprite Cache
   private spriteCache: Record<string, HTMLCanvasElement> = {};
@@ -848,15 +850,53 @@ export class GameScene {
   }
 
   private onKeyDown = (e: KeyboardEvent) => {
+    if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
     this.keys[e.code] = true;
     const controls = SettingsManager.getSettings().controls;
+
+    // Direct Throttle Adjustment when standing at the locomotive throttle console
+    if (this.currentInteractable?.type === 'Throttle' && this.engine) {
+      const throttles: (0 | 25 | 50 | 75 | 100 | 120)[] = [0, 25, 50, 75, 100, 120];
+      const curThr = this.engine.trainStats.throttle;
+      const curIdx = throttles.indexOf(curThr as any);
+
+      if (e.code === 'KeyW' || e.code === 'ArrowUp' || e.code === controls.forward) {
+        if (curIdx < throttles.length - 1) {
+          const nextThr = throttles[curIdx === -1 ? 1 : curIdx + 1];
+          this.engine.setThrottle(nextThr);
+          this.damageNumbers.push({
+            x: this.canvas.width / 2,
+            y: this.canvas.height / 2 - 140,
+            text: this.language === 'vi' ? `▲ CẦN GA: ${nextThr}%` : `▲ THROTTLE: ${nextThr}%`,
+            color: '#f59e0b',
+            life: 1.2,
+            maxLife: 1.2,
+          });
+        }
+      } else if (e.code === 'KeyS' || e.code === 'ArrowDown' || e.code === controls.backward) {
+        if (curIdx > 0) {
+          const prevThr = throttles[curIdx - 1];
+          this.engine.setThrottle(prevThr);
+          this.damageNumbers.push({
+            x: this.canvas.width / 2,
+            y: this.canvas.height / 2 - 140,
+            text: this.language === 'vi' ? `▼ CẦN GA: ${prevThr}%` : `▼ THROTTLE: ${prevThr}%`,
+            color: '#38bdf8',
+            life: 1.2,
+            maxLife: 1.2,
+          });
+        }
+      }
+    }
+
     if (e.code === 'KeyE' || e.code === controls.interact) {
       this.handleInteract();
     } else if (e.code === 'KeyH' || e.code === controls.horn) {
       soundManager.playHorn();
       this.screenShake = 6;
-    } else if (e.code === 'KeyT') {
-      this.toggleWeather();
+      if (this.onHelpToggle) {
+        this.onHelpToggle();
+      }
     }
   };
 
@@ -984,7 +1024,7 @@ export class GameScene {
         interactables.push({
           type: 'Repair',
           id: 'locomotive_repair',
-          name: isVi ? 'Hàn Kín Ống Hơi Nồi Hơi Đầu Máy [E]' : 'Weld Locomotive Steam Manifold [E]',
+          name: isVi ? 'Hàn Kín Ống Hơi Nồi Hơi Đầu Máy' : 'Weld Locomotive Steam Manifold',
           position: new THREE.Vector3(-1.0, 1.7, 7.5),
           distance: 0,
         });
@@ -994,7 +1034,7 @@ export class GameScene {
       if (pStep === 'depart_to_settlement') {
         interactables.push({
           type: 'Throttle',
-          name: isVi ? 'Bảng Điều Khiển Cần Ga Đầu Máy (W/S) [E]' : 'Locomotive Throttle Controls (W/S) [E]',
+          name: isVi ? 'Bảng Điều Khiển Cần Ga Đầu Máy' : 'Locomotive Throttle Controls',
           position: new THREE.Vector3(0, 1.7, 7.6),
           distance: 0,
         });
@@ -1095,6 +1135,9 @@ export class GameScene {
   // Update Player Movement along the train walkways or station platform
   private updatePlayerMovement(delta: number) {
     if (this.isMountedToTurret) return;
+    if (this.engine?.gameState === 'Paused') return;
+    if (this.engine?.prologue.isActive && this.engine.prologue.dialogueOpen) return;
+    if (this.engine?.chapter1?.isActive && this.engine.chapter1.dialogueOpen) return;
 
     const controls = SettingsManager.getSettings().controls;
     const isSprint = this.keys['ShiftLeft'] || this.keys['ShiftRight'] || (controls.sprint && this.keys[controls.sprint]);
@@ -1111,12 +1154,20 @@ export class GameScene {
       this.playerPos.addScaledVector(moveDir, moveSpeed * delta);
     }
 
-    // Boundary constraints in train & platform
-    if (!this.stationVisible) {
+    // Boundary constraints: allow survivor to step onto platform when at depot or station
+    const isAtPlatform = this.stationVisible || Boolean(
+      this.engine?.prologue.isActive &&
+      this.engine.prologue.step !== 'prologue_complete' &&
+      this.engine.trainStats.distanceTraveled < 0.15 &&
+      this.engine.trainStats.currentSpeed < 4
+    );
+
+    if (!isAtPlatform) {
+      // In-transit constraint (inside locomotive corridor)
       this.playerPos.x = Math.max(-1.1, Math.min(1.1, this.playerPos.x));
       this.playerPos.z = Math.max(-27.5, Math.min(8.0, this.playerPos.z));
     } else {
-      // Allowed out on platform
+      // Allowed out on depot / station platform to reach crates, radio, and boiler
       this.playerPos.x = Math.max(-1.1, Math.min(6.5, this.playerPos.x));
       this.playerPos.z = Math.max(-27.5, Math.min(22.0, this.playerPos.z));
     }
@@ -1186,9 +1237,70 @@ export class GameScene {
       this.muzzleFlashTimer = Math.max(0, this.muzzleFlashTimer - delta);
     }
 
-    // Automatic Firing when held in turret mode
-    if (this.isMountedToTurret && this.isMouseDown && turretState.currentAmmo > 0 && !turretState.isOverheated) {
-      // Periodic trigger handled by user or high rate
+    // Sync active enemies from game engine
+    if (this.engine) {
+      this.localEnemies = this.engine.enemies;
+    }
+
+    // Update fire cooldown
+    if (this.fireCooldown > 0) {
+      this.fireCooldown = Math.max(0, this.fireCooldown - delta);
+    }
+
+    // Automatic / Held Firing when mounted to turret
+    if (this.isMountedToTurret && this.isMouseDown && this.fireCooldown <= 0) {
+      if (turretState.currentAmmo > 0 && !turretState.isOverheated) {
+        const fireInterval = 1 / Math.max(4, turretState.fireRate || 8);
+        this.fireCooldown = fireInterval;
+        turretState.currentAmmo = Math.max(0, turretState.currentAmmo - 1);
+        if (this.engine) {
+          this.engine.turret.currentAmmo = turretState.currentAmmo;
+          this.engine.turret.heat = Math.min(100, this.engine.turret.heat + 5.5);
+          if (this.engine.turret.heat >= 100) {
+            this.engine.turret.isOverheated = true;
+            turretState.isOverheated = true;
+            soundManager.playAlarm();
+          }
+        }
+
+        // Spawn bullet projectile
+        const muzzleX = trainCenterX + Math.cos(this.turretAngle) * 32;
+        const muzzleY = (trainCenterY - 60) + Math.sin(this.turretAngle) * 32;
+        const bulletSpeed = 950;
+        this.projectiles.push({
+          x: muzzleX,
+          y: muzzleY,
+          vx: Math.cos(this.turretAngle) * bulletSpeed,
+          vy: Math.sin(this.turretAngle) * bulletSpeed,
+          life: 1.2,
+          maxLife: 1.2,
+          damage: turretState.damage,
+        });
+
+        // Recoil, muzzle flash, screen shake
+        this.turretRecoil = 5;
+        this.muzzleFlashTimer = 0.08;
+        this.screenShake = 2.5;
+        soundManager.playTurretShot();
+
+        // Eject brass casing particle
+        const casingAngle = this.turretAngle + Math.PI / 2;
+        this.particles.push({
+          x: muzzleX - Math.cos(this.turretAngle) * 10,
+          y: muzzleY - Math.sin(this.turretAngle) * 10,
+          vx: Math.cos(casingAngle) * (80 + Math.random() * 40),
+          vy: Math.sin(casingAngle) * (80 + Math.random() * 40) - 30,
+          life: 0.8,
+          maxLife: 0.8,
+          color: '#fbbf24',
+          size: 3,
+          type: 'casing',
+          gravity: 250,
+        });
+      } else if (turretState.currentAmmo <= 0 || turretState.isOverheated) {
+        soundManager.playClick();
+        this.fireCooldown = 0.25;
+      }
     }
 
     // Scroll road decorations
@@ -1216,14 +1328,17 @@ export class GameScene {
     // 6. RENDER ARMORED TRAIN CARRIAGES
     this.renderTrain(trainCenterX, trainCenterY, trainSpeed, delta);
 
-    // 7. RENDER ENEMIES IN 2D
+    // 7. RENDER LOOT PICKUPS ON WASTELAND TRACKS
+    this.renderLootPickups(trainCenterX, trainCenterY, delta);
+
+    // 8. RENDER ENEMIES IN 2D
     this.renderEnemies(trainCenterX, trainCenterY, delta);
 
-    // 8. RENDER PLAYER SURVIVOR
-    this.renderPlayer(trainCenterX, trainCenterY);
-
-    // 9. RENDER PROJECTILES, TRACERS & EXPLOSIONS
+    // 9. RENDER PROJECTILES, TRACERS, SMOKE & EXPLOSIONS
     this.renderCombatEffects(delta);
+
+    // 10. RENDER PLAYER SURVIVOR (On top of smoke so survivor is clearly visible)
+    this.renderPlayer(trainCenterX, trainCenterY);
 
     // 10. RENDER WEATHER PRECIPITATION (Snowflakes / Raindrops)
     this.renderWeatherParticles(width, height, delta, trainSpeed);
@@ -1332,10 +1447,24 @@ export class GameScene {
   private renderStationPlatform(trainCenterX: number, height: number, delta: number) {
     const ctx = this.ctx;
     const platformX = trainCenterX + 48;
+    const isPrologueDepot = Boolean(
+      this.engine?.prologue.isActive &&
+      this.engine.prologue.step !== 'prologue_complete' &&
+      this.engine.trainStats.distanceTraveled < 0.35
+    );
 
     if (this.stationVisible) {
       // Station platform smoothly slides in
       this.stationY = Math.min(this.stationTargetY, this.stationY + delta * 300);
+    } else if (isPrologueDepot) {
+      if (this.engine && this.engine.trainStats.currentSpeed > 0) {
+        this.stationY += (this.engine.trainStats.currentSpeed * 10 * delta);
+      } else {
+        this.stationY = this.stationTargetY;
+      }
+      if (this.stationY > height + 600) {
+        return;
+      }
     } else {
       this.stationY = -800;
       return;
@@ -1362,40 +1491,120 @@ export class GameScene {
       ctx.fillRect(platformX + 16, py, 6, 6);
     }
 
-    // 3 Loot Crates with beacon glow
-    const crates = [
-      { id: 'crate_scrap', y: this.stationY - 80, color: '#f59e0b', name: 'SCRAP CRATE' },
-      { id: 'crate_fuel', y: this.stationY + 120, color: '#3b82f6', name: 'FUEL DRUMS' },
-      { id: 'crate_ammo', y: this.stationY + 320, color: '#22c55e', name: 'AMMO CACHE' },
-    ];
+    if (isPrologueDepot) {
+      const trainCenterY = height / 2 + 30;
+      const depotScrollOffset = this.stationY - this.stationTargetY;
 
-    crates.forEach((cr) => {
-      const cx = platformX + 32;
-      const cy = cr.y;
+      // 1. Prologue Emergency Radio at (x=3.8, z=6.0)
+      const radioScreenX = trainCenterX + 3.8 * 24;
+      const radioScreenY = trainCenterY - 6.0 * 18 + depotScrollOffset;
+      const radioSprite = this.spriteCache['depot_radio'];
+      if (radioSprite) {
+        ctx.drawImage(radioSprite, radioScreenX - 18, radioScreenY - 18);
+        if (!this.engine?.prologue.radioMessageRead) {
+          ctx.save();
+          ctx.strokeStyle = '#06b6d4';
+          ctx.lineWidth = 2;
+          ctx.beginPath();
+          ctx.arc(radioScreenX, radioScreenY, 20 + Math.sin(Date.now() * 0.008) * 4, 0, Math.PI * 2);
+          ctx.stroke();
+          ctx.restore();
+        }
+      }
 
-      // Glow halo
-      ctx.save();
-      const glow = ctx.createRadialGradient(cx, cy, 4, cx, cy, 32);
-      glow.addColorStop(0, cr.color);
-      glow.addColorStop(1, 'rgba(0, 0, 0, 0)');
-      ctx.fillStyle = glow;
-      ctx.globalAlpha = 0.45 + Math.sin(Date.now() * 0.006) * 0.25;
-      ctx.beginPath();
-      ctx.arc(cx, cy, 32, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.restore();
+      // 2. Prologue Fuel Barrel Cache at (x=4.0, z=1.5)
+      if (this.engine && this.engine.prologue.fuelCollected === 0) {
+        const fuelScreenX = trainCenterX + 4.0 * 24;
+        const fuelScreenY = trainCenterY - 1.5 * 18 + depotScrollOffset;
+        const fuelSprite = this.spriteCache['depot_fuel_barrel'];
+        if (fuelSprite) {
+          ctx.drawImage(fuelSprite, fuelScreenX - 18, fuelScreenY - 18);
+          ctx.save();
+          ctx.strokeStyle = '#38bdf8';
+          ctx.lineWidth = 2;
+          ctx.beginPath();
+          ctx.arc(fuelScreenX, fuelScreenY, 18 + Math.sin(Date.now() * 0.007) * 3, 0, Math.PI * 2);
+          ctx.stroke();
+          ctx.restore();
+        }
+      }
 
-      // Crate box
-      ctx.fillStyle = cr.color;
-      ctx.fillRect(cx - 10, cy - 10, 20, 20);
-      ctx.strokeStyle = '#09090b';
-      ctx.lineWidth = 2;
-      ctx.strokeRect(cx - 10, cy - 10, 20, 20);
+      // 3. Prologue Scrap Pile at (x=4.0, z=-8.5)
+      if (this.engine && this.engine.prologue.scrapCollected === 0) {
+        const scrapScreenX = trainCenterX + 4.0 * 24;
+        const scrapScreenY = trainCenterY - (-8.5) * 18 + depotScrollOffset;
+        const scrapSprite = this.spriteCache['depot_scrap_pile'];
+        if (scrapSprite) {
+          ctx.drawImage(scrapSprite, scrapScreenX - 20, scrapScreenY - 18);
+          ctx.save();
+          ctx.strokeStyle = '#f59e0b';
+          ctx.lineWidth = 2;
+          ctx.beginPath();
+          ctx.arc(scrapScreenX, scrapScreenY, 20 + Math.sin(Date.now() * 0.007) * 3, 0, Math.PI * 2);
+          ctx.stroke();
+          ctx.restore();
+        }
+      }
 
-      // Flashing Beacon LED
-      ctx.fillStyle = '#ffffff';
-      ctx.fillRect(cx - 2, cy - 14, 4, 4);
-    });
+      // 4. Locomotive Steam Pipe Repair indicator at (x=-1.0, z=7.5)
+      if (this.engine && this.engine.prologue.step === 'repair_engine') {
+        const repairX = trainCenterX - 1.0 * 24;
+        const repairY = trainCenterY - 7.5 * 18;
+        const wrenchSprite = this.spriteCache['depot_repair_wrench'];
+        if (wrenchSprite) {
+          ctx.drawImage(wrenchSprite, repairX - 16, repairY - 16);
+          // Steam hiss particles from crack
+          if (Math.random() < 0.35) {
+            this.particles.push({
+              x: repairX + (Math.random() - 0.5) * 8,
+              y: repairY + (Math.random() - 0.5) * 8,
+              vx: (Math.random() - 0.5) * 30 - 20,
+              vy: -40 - Math.random() * 40,
+              life: 0.6,
+              maxLife: 0.6,
+              color: '#e0f2fe',
+              size: 4,
+              type: 'smoke',
+            });
+          }
+        }
+      }
+    } else {
+      // Procedural Station Loot Crates
+      const crates = [
+        { id: 'crate_scrap', y: this.stationY - 80, color: '#f59e0b', name: 'SCRAP CRATE' },
+        { id: 'crate_fuel', y: this.stationY + 120, color: '#3b82f6', name: 'FUEL DRUMS' },
+        { id: 'crate_ammo', y: this.stationY + 320, color: '#22c55e', name: 'AMMO CACHE' },
+      ];
+
+      crates.forEach((cr) => {
+        const cx = platformX + 32;
+        const cy = cr.y;
+
+        // Glow halo
+        ctx.save();
+        const glow = ctx.createRadialGradient(cx, cy, 4, cx, cy, 32);
+        glow.addColorStop(0, cr.color);
+        glow.addColorStop(1, 'rgba(0, 0, 0, 0)');
+        ctx.fillStyle = glow;
+        ctx.globalAlpha = 0.45 + Math.sin(Date.now() * 0.006) * 0.25;
+        ctx.beginPath();
+        ctx.arc(cx, cy, 32, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+
+        // Crate box
+        ctx.fillStyle = cr.color;
+        ctx.fillRect(cx - 10, cy - 10, 20, 20);
+        ctx.strokeStyle = '#09090b';
+        ctx.lineWidth = 2;
+        ctx.strokeRect(cx - 10, cy - 10, 20, 20);
+
+        // Flashing Beacon LED
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(cx - 2, cy - 14, 4, 4);
+      });
+    }
   }
 
   // 5. Scenery objects (poles, rocks, ruined cars, puddles)
@@ -1473,6 +1682,37 @@ export class GameScene {
       ctx.drawImage(locoSprite, trainCenterX - 36, locoY);
     }
 
+    // Visible Locomotive Upgrades (Wedge Cowcatcher, Amber Radiator & Twin Exhaust Stacks)
+    const locoData = this.engine?.carriages.find((c) => c.type === 'Locomotive');
+    const hasLocoUpgrade = locoData?.installedUpgrades?.some((u) =>
+      u.includes('Boiler') || u.includes('Generator') || u.includes('Đầu Máy') || u.includes('Supercharger')
+    );
+    if (hasLocoUpgrade) {
+      // Heavy Steel V-Plow Cowcatcher at front
+      ctx.fillStyle = '#334155';
+      ctx.beginPath();
+      ctx.moveTo(trainCenterX, locoY - 14);
+      ctx.lineTo(trainCenterX + 36, locoY + 8);
+      ctx.lineTo(trainCenterX - 36, locoY + 8);
+      ctx.closePath();
+      ctx.fill();
+      ctx.strokeStyle = '#f59e0b';
+      ctx.lineWidth = 2;
+      ctx.stroke();
+
+      // Glowing Amber Radiator Core
+      ctx.fillStyle = '#f59e0b';
+      ctx.fillRect(trainCenterX - 14, locoY - 4, 28, 5);
+
+      // Twin Chrome Exhaust Stacks
+      ctx.fillStyle = '#94a3b8';
+      ctx.fillRect(trainCenterX - 24, locoY + 36, 6, 14);
+      ctx.fillRect(trainCenterX + 18, locoY + 36, 6, 14);
+      ctx.fillStyle = '#f97316';
+      ctx.fillRect(trainCenterX - 23, locoY + 34, 4, 3);
+      ctx.fillRect(trainCenterX + 19, locoY + 34, 4, 3);
+    }
+
     // Locomotive Smokestack Smoke Particles
     if (trainSpeed > 2 && Math.random() < 0.75) {
       this.particles.push({
@@ -1491,10 +1731,10 @@ export class GameScene {
     const carriagesToRender = this.engine?.carriages && this.engine.carriages.length > 1
       ? this.engine.carriages.slice(1)
       : [
-          { id: 'car_defense', type: 'Defense' },
-          { id: 'car_workshop', type: 'Workshop' },
-          { id: 'car_storage', type: 'Storage' },
-          { id: 'car_power', type: 'Power' },
+          { id: 'car_defense', type: 'Defense', installedUpgrades: [] },
+          { id: 'car_workshop', type: 'Workshop', installedUpgrades: [] },
+          { id: 'car_storage', type: 'Storage', installedUpgrades: [] },
+          { id: 'car_power', type: 'Power', installedUpgrades: [] },
         ];
 
     let currentY = locoY + 128;
@@ -1507,6 +1747,26 @@ export class GameScene {
       ctx.fillRect(trainCenterX - 4, currentY, 8, 10);
       currentY += 10;
 
+      // Visible Reinforced Steel Armor Plates on Flanks if upgraded
+      const hasArmorUpgrade = (c as any).installedUpgrades?.some((u: string) =>
+        u.includes('Armor') || u.includes('Thép') || u.includes('Giáp') || u.includes('Plates')
+      );
+      if (hasArmorUpgrade) {
+        ctx.fillStyle = '#334155';
+        ctx.fillRect(trainCenterX - 38, currentY + 10, 6, 88);
+        ctx.fillRect(trainCenterX + 32, currentY + 10, 6, 88);
+        // Steel Rivet studs
+        ctx.fillStyle = '#cbd5e1';
+        for (let ry = currentY + 16; ry < currentY + 94; ry += 16) {
+          ctx.fillRect(trainCenterX - 37, ry, 3, 3);
+          ctx.fillRect(trainCenterX + 34, ry, 3, 3);
+        }
+        // Hazard chevron stripes on armor skirts
+        ctx.fillStyle = '#f59e0b';
+        ctx.fillRect(trainCenterX - 37, currentY + 44, 4, 12);
+        ctx.fillRect(trainCenterX + 33, currentY + 44, 4, 12);
+      }
+
       if (c.id === 'car_passenger' || c.type === 'Living') {
         const passSprite = this.spriteCache['carriage_passenger'];
         if (passSprite) {
@@ -1515,14 +1775,33 @@ export class GameScene {
 
         // Observation defense firing point at rear of passenger car
         const defMountY = currentY + 70;
+        const isMk2 = this.engine?.turret.name.includes('Mk2');
+
         if (this.isMountedToTurret) {
           ctx.save();
           ctx.translate(trainCenterX, defMountY);
           ctx.rotate(this.turretAngle + Math.PI / 2);
-          ctx.fillStyle = '#3f3f46';
-          ctx.fillRect(-6, -12, 12, 16);
-          ctx.fillStyle = '#18181b';
-          ctx.fillRect(-2, -24, 4, 16); // rifle barrel
+          if (isMk2) {
+            // Mk2 Dual Heavy Rotary Barrels
+            ctx.fillStyle = '#0f172a';
+            ctx.fillRect(-9, -14, 18, 18);
+            ctx.fillStyle = '#38bdf8'; // drum magazine
+            ctx.beginPath();
+            ctx.arc(0, 4, 8, 0, Math.PI * 2);
+            ctx.fill();
+            // Twin heavy barrels
+            ctx.fillStyle = '#1e293b';
+            ctx.fillRect(-5, -28, 3, 18);
+            ctx.fillRect(2, -28, 3, 18);
+            ctx.fillStyle = '#64748b';
+            ctx.fillRect(-6, -30, 5, 3);
+            ctx.fillRect(1, -30, 5, 3);
+          } else {
+            ctx.fillStyle = '#3f3f46';
+            ctx.fillRect(-6, -12, 12, 16);
+            ctx.fillStyle = '#18181b';
+            ctx.fillRect(-2, -24, 4, 16); // single rifle barrel
+          }
           ctx.restore();
         }
 
@@ -1530,12 +1809,12 @@ export class GameScene {
         if (this.muzzleFlashTimer > 0) {
           ctx.save();
           ctx.translate(trainCenterX, defMountY);
-          const flashDist = 30;
+          const flashDist = 32;
           const fx = Math.cos(this.turretAngle) * flashDist;
           const fy = Math.sin(this.turretAngle) * flashDist;
           ctx.fillStyle = '#fef08a';
           ctx.beginPath();
-          ctx.arc(fx, fy, 8, 0, Math.PI * 2);
+          ctx.arc(fx, fy, isMk2 ? 11 : 8, 0, Math.PI * 2);
           ctx.fill();
           ctx.restore();
         }
@@ -1560,6 +1839,14 @@ export class GameScene {
           ctx.translate(recoilOffsetX, recoilOffsetY);
           ctx.rotate(this.turretAngle + Math.PI / 2);
           ctx.drawImage(turretSprite, -22, -27);
+
+          if (this.engine?.turret.name.includes('Mk2')) {
+            // Dual barrel overlay for Mk2
+            ctx.fillStyle = '#38bdf8';
+            ctx.fillRect(-8, -26, 4, 14);
+            ctx.fillRect(4, -26, 4, 14);
+          }
+
           ctx.restore();
         }
 
@@ -1572,11 +1859,7 @@ export class GameScene {
           const fy = Math.sin(this.turretAngle) * flashDist;
           ctx.fillStyle = '#fef08a';
           ctx.beginPath();
-          ctx.arc(fx, fy, 8, 0, Math.PI * 2);
-          ctx.fill();
-          ctx.fillStyle = '#f97316';
-          ctx.beginPath();
-          ctx.arc(fx, fy, 14, 0, Math.PI * 2);
+          ctx.arc(fx, fy, 9, 0, Math.PI * 2);
           ctx.fill();
           ctx.restore();
         }
@@ -1600,6 +1883,95 @@ export class GameScene {
           ctx.drawImage(powerSprite, trainCenterX - 34, currentY);
         }
         currentY += 104;
+      }
+    }
+  }
+
+  // 6.5 Render real collectible Loot Pickups on track
+  private renderLootPickups(trainCenterX: number, trainCenterY: number, delta: number) {
+    if (!this.engine || !this.engine.lootPickups || this.engine.lootPickups.length === 0) return;
+    const ctx = this.ctx;
+
+    for (let i = this.engine.lootPickups.length - 1; i >= 0; i--) {
+      const p = this.engine.lootPickups[i];
+      const screenX = trainCenterX + p.x * 24;
+      const screenY = trainCenterY - p.z * 18;
+
+      // Bobbing floating animation
+      const bob = Math.sin(Date.now() * 0.005 + i * 17) * 3;
+
+      let color = '#f59e0b'; // scrap = amber
+      if (p.type === 'ammo') {
+        color = '#22c55e'; // ammo = green
+      } else if (p.type === 'fuel') {
+        color = '#38bdf8'; // fuel = blue
+      }
+
+      // Glowing aura
+      ctx.save();
+      const aura = ctx.createRadialGradient(screenX, screenY + bob, 2, screenX, screenY + bob, 20);
+      aura.addColorStop(0, color);
+      aura.addColorStop(1, 'rgba(0,0,0,0)');
+      ctx.fillStyle = aura;
+      ctx.globalAlpha = 0.5 + Math.sin(Date.now() * 0.008 + i) * 0.25;
+      ctx.beginPath();
+      ctx.arc(screenX, screenY + bob, 20, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+
+      // Item Box / Canister
+      ctx.save();
+      ctx.translate(screenX, screenY + bob);
+      ctx.fillStyle = '#09090b';
+      ctx.fillRect(-9, -9, 18, 18);
+      ctx.fillStyle = color;
+      ctx.fillRect(-7, -7, 14, 14);
+      ctx.strokeStyle = '#ffffff';
+      ctx.lineWidth = 1;
+      ctx.strokeRect(-7, -7, 14, 14);
+
+      // Icon symbol
+      ctx.fillStyle = '#09090b';
+      ctx.font = 'bold 8px monospace';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(p.type === 'scrap' ? 'S' : p.type === 'ammo' ? 'A' : 'F', 0, 0);
+
+      // Quantity tag above item
+      ctx.fillStyle = color;
+      ctx.font = 'bold 8px monospace';
+      ctx.fillText(`+${p.quantity}`, 0, -12);
+      ctx.restore();
+
+      // Proximity check for pickup by survivor
+      const dist = this.playerPos.distanceTo(new THREE.Vector3(p.x, 1.6, p.z));
+      const nearSurvivor = dist < 4.5 || (Math.abs(this.playerPos.z - p.z) < 3.2 && Math.abs(this.playerPos.x - p.x) < 4.2);
+      if (nearSurvivor) {
+        const collected = this.engine.collectPickup(p.id);
+        if (collected) {
+          this.damageNumbers.push({
+            x: screenX,
+            y: screenY - 20,
+            text: `+${collected.quantity} ${collected.name}`,
+            color: color,
+            life: 1.8,
+            maxLife: 1.8,
+          });
+          // Sparkle burst
+          for (let s = 0; s < 10; s++) {
+            this.particles.push({
+              x: screenX,
+              y: screenY,
+              vx: (Math.random() - 0.5) * 140,
+              vy: (Math.random() - 0.5) * 140 - 30,
+              life: 0.5,
+              maxLife: 0.5,
+              color: color,
+              size: 2.5,
+              type: 'spark',
+            });
+          }
+        }
       }
     }
   }
@@ -1769,6 +2141,9 @@ export class GameScene {
               color: '#f97316',
             });
             soundManager.playExplosion();
+            if (this.engine) {
+              this.engine.onEnemyKilled(e);
+            }
           } else {
             soundManager.playHitImpact();
           }

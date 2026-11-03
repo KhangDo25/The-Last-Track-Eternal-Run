@@ -1,6 +1,8 @@
 import {
   AudioLog,
   CarriageData,
+  Chapter1State,
+  Chapter1Step,
   ChapterId,
   Companion,
   CraftingRecipe,
@@ -22,6 +24,7 @@ import {
   WeatherTimelineItem,
   LootPickup,
   TutorialStep,
+  DefeatReason,
 } from '../types/game';
 import { soundManager } from '../audio/soundManager';
 import { SaveManager } from './saveManager';
@@ -154,6 +157,7 @@ const DEFAULT_UPGRADES: UpgradeOption[] = [
 
 export class GameEngine {
   public gameState: GameState = 'Playing';
+  public defeatReason: DefeatReason | null = null;
   public godMode: boolean = false;
 
   // Player state
@@ -202,71 +206,39 @@ export class GameEngine {
     nextStationDistance: 3.5, // km until station
   };
 
-  // Carriages
+  // Initial Carriages: Exactly 1 Locomotive and 1 ordinary Passenger Carriage
   public carriages: CarriageData[] = [
     {
       id: 'car_locomotive',
-      name: 'Ironclad Locomotive #01',
+      name: 'Đầu Máy Shunter #04 (Phế Tích)',
       type: 'Locomotive',
-      maxHealth: 500,
-      currentHealth: 480,
+      maxHealth: 350,
+      currentHealth: 160,
       baseWeight: 22.0,
       powerConsumption: 10,
-      powerProduction: 160, // Generator Mk1
-      armorRating: 30,
-      installedUpgrades: [],
-      weaponSlots: 0,
-      armorSlots: 2,
-      utilitySlots: 2,
-      positionIndex: 0,
-    },
-    {
-      id: 'car_workshop',
-      name: 'Workshop & Living Car',
-      type: 'Workshop',
-      maxHealth: 300,
-      currentHealth: 290,
-      baseWeight: 8.5,
-      powerConsumption: 35,
-      powerProduction: 0,
+      powerProduction: 80,
       armorRating: 15,
       installedUpgrades: [],
       weaponSlots: 0,
-      armorSlots: 2,
-      utilitySlots: 3,
-      positionIndex: 1,
-    },
-    {
-      id: 'car_defense',
-      name: 'Reinforced Defense Car',
-      type: 'Defense',
-      maxHealth: 350,
-      currentHealth: 340,
-      baseWeight: 9.0,
-      powerConsumption: 25,
-      powerProduction: 0,
-      armorRating: 25,
-      installedUpgrades: [],
-      weaponSlots: 2,
-      armorSlots: 4,
+      armorSlots: 1,
       utilitySlots: 1,
-      positionIndex: 2,
+      positionIndex: 0,
     },
     {
-      id: 'car_storage',
-      name: 'Heavy Cargo Storage Car',
-      type: 'Storage',
-      maxHealth: 280,
-      currentHealth: 275,
-      baseWeight: 5.0,
+      id: 'car_passenger',
+      name: 'Toa Hành Khách Hạng B #108',
+      type: 'Living',
+      maxHealth: 250,
+      currentHealth: 250,
+      baseWeight: 10.0,
       powerConsumption: 15,
       powerProduction: 0,
       armorRating: 10,
       installedUpgrades: [],
-      weaponSlots: 0,
-      armorSlots: 2,
-      utilitySlots: 4,
-      positionIndex: 3,
+      weaponSlots: 1,
+      armorSlots: 1,
+      utilitySlots: 2,
+      positionIndex: 1,
     },
   ];
 
@@ -397,6 +369,22 @@ export class GameEngine {
     },
   };
 
+  // Phase 6: Chapter 1 Story & Mara Progression
+  public chapter1: Chapter1State = {
+    isActive: false,
+    step: 'not_started',
+    log1Discovered: false,
+    maraDistressHeard: false,
+    roadblockSpawned: false,
+    roadblockDefeated: false,
+    maraRecruited: false,
+    maraDecisionMade: false,
+    workshopCarriageEarned: false,
+    outpostDocked: false,
+    dialogueOpen: false,
+    activeStoryModal: 'none',
+  };
+
   // Phase 2: Save, Story & Playtime State
   public playtimeSeconds: number = 0;
   public currentChapter: ChapterId = 'Prologue';
@@ -421,6 +409,27 @@ export class GameEngine {
   }
 
   public setupPrologue() {
+    this.gameState = 'Playing';
+    this.defeatReason = null;
+    this.lootPickups = [];
+    this.currentChapter = 'Prologue';
+    this.completedObjectives = ['prologue_awakening'];
+    this.storyDecisions = { radio_terminal_zero_heard: true };
+    this.companions = JSON.parse(JSON.stringify(INITIAL_COMPANIONS));
+    this.audioLogs = JSON.parse(JSON.stringify(AUDIO_LOGS_DATABASE));
+
+    this.playerStats = {
+      health: 100,
+      maxHealth: 100,
+      stamina: 100,
+      hunger: 100,
+      thirst: 100,
+      bodyTemperature: 37.0,
+      toxicity: 0,
+      sanity: 100,
+      oxygen: 100,
+    };
+
     this.prologue.isActive = true;
     this.prologue.step = 'intro_cutscene';
     this.prologue.fuelCollected = 0;
@@ -431,6 +440,21 @@ export class GameEngine {
     this.prologue.radioMessageRead = false;
     this.prologue.openingSeen = false;
     this.prologue.dialogueOpen = true;
+
+    this.chapter1 = {
+      isActive: false,
+      step: 'not_started',
+      log1Discovered: false,
+      maraDistressHeard: false,
+      roadblockSpawned: false,
+      roadblockDefeated: false,
+      maraRecruited: false,
+      maraDecisionMade: false,
+      workshopCarriageEarned: false,
+      outpostDocked: false,
+      dialogueOpen: false,
+      activeStoryModal: 'none',
+    };
 
     // Phase 1 Initial Train: Exactly 1 Locomotive and 1 ordinary Passenger Carriage
     this.carriages = [
@@ -594,7 +618,9 @@ export class GameEngine {
 
     this.carriages[0].currentHealth = this.carriages[0].maxHealth;
     this.prologue.engineRepaired = true;
-    this.completedObjectives.push('repaired_shunter_pipe');
+    if (!this.completedObjectives.includes('repaired_shunter_pipe')) {
+      this.completedObjectives.push('repaired_shunter_pipe');
+    }
     this.storyDecisions['engine_repaired'] = true;
     soundManager.playClick();
     this.triggerStorySave('Hàn ống hơi đầu máy - Đã bảo trì Shunter #04');
@@ -665,7 +691,9 @@ export class GameEngine {
     this.prologue.raidersDefeated++;
     if (this.prologue.raidersDefeated >= 3) {
       this.prologue.step = 'depart_to_settlement';
-      this.completedObjectives.push('raiders_ambush_defeated');
+      if (!this.completedObjectives.includes('raiders_ambush_defeated')) {
+        this.completedObjectives.push('raiders_ambush_defeated');
+      }
       this.storyDecisions['depot_ambush_survived'] = true;
       soundManager.playHorn();
       this.triggerStorySave('Đẩy lùi đợt phục kích của bọn cướp kho ga');
@@ -680,15 +708,331 @@ export class GameEngine {
   public completePrologue() {
     this.prologue.isActive = false;
     this.currentChapter = 'Chapter1';
-    this.completedObjectives.push('prologue_completed');
+    if (!this.completedObjectives.includes('prologue_completed')) {
+      this.completedObjectives.push('prologue_completed');
+    }
     this.storyDecisions['haven_sentry_greeted'] = true;
-    this.trainStats.nextStationDistance = 10.0;
-    this.triggerStorySave('Hoàn thành Mở Đầu - Bắt đầu Chương 1: The Last Departure');
+    this.startChapter1();
+  }
+
+  public startChapter1() {
+    this.currentChapter = 'Chapter1';
+    this.chapter1.isActive = true;
+    this.chapter1.step = 'outskirts_travel';
+    this.trainStats.nextStationDistance = 9.0; // Distance to Outpost 42 (from 3.0 to 12.0 km)
+    this.triggerStorySave('Bắt đầu Chương I: The Last Departure - Rời Tiền Đồn Haven');
     this.addNotification({
-      title: 'CHÀO MỪNG ĐẾN GIAI ĐOẠN 2',
-      details: 'Đã mở khóa toàn bộ hệ thống nâng cấp toa tàu và hành trình bất tận',
+      title: 'CHƯƠNG I: THE LAST DEPARTURE',
+      details: 'Vượt qua vùng đất tro tàn, ứng cứu trạm tín hiệu và tiếp cận Tiền Đồn 42',
       type: 'station',
     });
+  }
+
+  public updateChapter1Story(kmTraveled: number) {
+    if (!this.chapter1.isActive || this.currentChapter !== 'Chapter1') return;
+
+    // 1. Environmental Storytelling Discovery: Dr. Adrian Voss Memo #12
+    if (
+      !this.chapter1.log1Discovered &&
+      this.trainStats.distanceTraveled >= 3.6 &&
+      !this.completedObjectives.includes('ch1_log01_found')
+    ) {
+      this.discoverAudioLog('log_01');
+      this.chapter1.log1Discovered = true;
+      this.chapter1.step = 'log1_discovered';
+      this.chapter1.activeStoryModal = 'log1_modal';
+      this.chapter1.dialogueOpen = true;
+      this.completedObjectives.push('ch1_log01_found');
+      this.storyDecisions['log01_unlocked'] = true;
+      this.triggerStorySave('Khám phá Bản Ghi Âm #12 của TS. Adrian Voss');
+      return;
+    }
+
+    // 2. Radio Message from Mara Cole
+    if (
+      !this.chapter1.maraDistressHeard &&
+      this.trainStats.distanceTraveled >= 4.6 &&
+      !this.completedObjectives.includes('ch1_mara_distress_heard')
+    ) {
+      this.chapter1.maraDistressHeard = true;
+      this.chapter1.step = 'mara_distress';
+      this.chapter1.activeStoryModal = 'mara_distress_modal';
+      this.chapter1.dialogueOpen = true;
+      this.completedObjectives.push('ch1_mara_distress_heard');
+      soundManager.playAlarm();
+      this.triggerStorySave('Thu được tín hiệu cầu cứu khẩn cấp từ Mara Cole');
+      return;
+    }
+
+    // 3. Boss Encounter: Armored Raider Roadblock Truck
+    if (
+      !this.chapter1.roadblockSpawned &&
+      this.trainStats.distanceTraveled >= 5.4 &&
+      !this.completedObjectives.includes('ch1_roadblock_spawned')
+    ) {
+      this.spawnChapter1RoadblockBoss();
+      return;
+    }
+
+    // 4. Docking at Outpost 42 after recruiting Mara
+    if (
+      this.chapter1.maraRecruited &&
+      !this.chapter1.outpostDocked &&
+      this.trainStats.nextStationDistance <= 0.05
+    ) {
+      this.dockAtOutpost42();
+    }
+  }
+
+  public discoverAudioLog(logId: string) {
+    const log = this.audioLogs.find((l) => l.id === logId);
+    if (log) {
+      log.unlocked = true;
+      soundManager.playClick();
+      this.addNotification({
+        title: 'PHÁT HIỆN BẢN GHI ÂM',
+        details: `${log.title} (${log.speaker})`,
+        type: 'loot',
+      });
+    }
+  }
+
+  public spawnChapter1RoadblockBoss() {
+    if (this.completedObjectives.includes('ch1_roadblock_defeated')) return;
+
+    this.chapter1.roadblockSpawned = true;
+    this.chapter1.step = 'roadblock_boss';
+    if (!this.completedObjectives.includes('ch1_roadblock_spawned')) {
+      this.completedObjectives.push('ch1_roadblock_spawned');
+    }
+
+    // Boss entity: Heavy Armored Raider Truck barricading the tracks ahead
+    this.enemies.push({
+      id: 'boss_ch1_raider_truck',
+      type: 'HullBreaker',
+      x: 0,
+      y: 0.2,
+      z: 32.0,
+      health: 180,
+      maxHealth: 180,
+      speed: 16,
+      targetCarriageIndex: 0,
+      isAttached: false,
+      attackTimer: 0,
+      damagePerHit: 14,
+    });
+
+    // Escort chasers
+    this.enemies.push({
+      id: 'raider_escort_1',
+      type: 'Chaser',
+      x: -3.8,
+      y: 0.2,
+      z: 30.0,
+      health: 35,
+      maxHealth: 35,
+      speed: 14,
+      targetCarriageIndex: 1,
+      isAttached: false,
+      attackTimer: 0,
+      damagePerHit: 6,
+    });
+    this.enemies.push({
+      id: 'raider_escort_2',
+      type: 'Chaser',
+      x: 3.8,
+      y: 0.2,
+      z: 30.0,
+      health: 35,
+      maxHealth: 35,
+      speed: 14,
+      targetCarriageIndex: 1,
+      isAttached: false,
+      attackTimer: 0,
+      damagePerHit: 6,
+    });
+
+    soundManager.playAlarm();
+    this.addNotification({
+      title: 'TRÙM CHƯƠNG I: XE TẢI BỌC THÉP BỌN CƯỚP!',
+      details: 'Vật chắn đường ray bọc thép hạng nặng (180 HP) đang lao tới! Dùng pháo hạ gục!',
+      type: 'warning',
+    });
+  }
+
+  public onChapter1BossDefeated(boss: EnemyEntity) {
+    if (this.completedObjectives.includes('ch1_roadblock_defeated')) return;
+
+    this.chapter1.roadblockDefeated = true;
+    this.chapter1.step = 'mara_rescue_dialogue';
+    this.chapter1.dialogueOpen = true;
+    this.chapter1.activeStoryModal = 'mara_rescue_modal';
+    this.completedObjectives.push('ch1_roadblock_defeated');
+    this.storyDecisions['ch1_roadblock_destroyed'] = true;
+
+    // Drop boss salvage rewards directly
+    const scrapInv = this.inventory.find((i) => i.id === 'scrap');
+    if (scrapInv) scrapInv.quantity += 35;
+    const steelInv = this.inventory.find((i) => i.id === 'steel');
+    if (steelInv) steelInv.quantity += 12;
+    else this.inventory.push({ id: 'steel', name: 'Refined Steel', type: 'Material', weight: 1.2, quantity: 12, maxStack: 50, description: 'Heavy alloy', icon: 'shield' });
+
+    this.turret.currentAmmo = Math.min(this.turret.maxAmmo, this.turret.currentAmmo + 60);
+
+    soundManager.playHorn();
+    this.triggerStorySave('Tiêu diệt Xe Tải Bọc Thép Bọn Cướp - Mở khóa giải cứu Mara Cole');
+
+    this.addNotification({
+      title: 'ĐÃ PHÁ HỦY XE TẢI BỌC THÉP!',
+      details: 'Đoạn chắn ray đã bị dọn sạch! Tiếp cận hộp tín hiệu đường sắt để giải cứu Mara Cole [E]',
+      type: 'station',
+    });
+  }
+
+  public makeChapter1Decision(choice: 'share_fuel' | 'conserve_fuel') {
+    if (this.chapter1.maraDecisionMade) return;
+
+    this.chapter1.maraDecisionMade = true;
+    this.chapter1.maraDecisionChoice = choice;
+
+    const mara = this.companions.find((c) => c.id === 'mara');
+
+    if (choice === 'share_fuel') {
+      // Deduct 20 fuel for Outpost 42 survivors
+      this.trainStats.currentFuel = Math.max(5, this.trainStats.currentFuel - 20);
+      if (mara) mara.loyalty = 75; // Deep gratitude
+      this.storyDecisions['mara_fuel_shared'] = true;
+
+      // Generous survivor gifts
+      const steelInv = this.inventory.find((i) => i.id === 'steel');
+      if (steelInv) steelInv.quantity += 20;
+      const electroInv = this.inventory.find((i) => i.id === 'electronics');
+      if (electroInv) electroInv.quantity += 12;
+      else this.inventory.push({ id: 'electronics', name: 'Electronics Parts', type: 'Resource', weight: 0.3, quantity: 12, maxStack: 40, description: 'Circuit relays', icon: 'cpu' });
+
+      this.addNotification({
+        title: 'QUYẾT ĐỊNH: CHIA SẺ NHIÊN LIỆU',
+        details: 'Cứu 50 gia đình tại Tiền Đồn 42. Mara trung thành +25, nhận +20 Thép & +12 Linh Kiện Điện Tử!',
+        type: 'loot',
+      });
+    } else {
+      // Conserve fuel for the train
+      this.trainStats.currentFuel = Math.min(this.trainStats.maxFuel, this.trainStats.currentFuel + 15);
+      if (mara) mara.loyalty = 55; // Pragmatic respect
+      this.storyDecisions['mara_fuel_shared'] = false;
+
+      this.addNotification({
+        title: 'QUYẾT ĐỊNH: BẢO TOÀN NHIÊN LIỆU',
+        details: 'Giữ lại +15L nhiên liệu dự trữ cho đầu máy vượt qua bão tuyết.',
+        type: 'warning',
+      });
+    }
+
+    // Recruit Mara Cole
+    if (mara) {
+      mara.isRecruited = true;
+    }
+    this.chapter1.maraRecruited = true;
+    if (!this.completedObjectives.includes('ch1_mara_recruited')) {
+      this.completedObjectives.push('ch1_mara_recruited');
+    }
+
+    // Earn and couple the Workshop Carriage (Requirement 6: New carriages must be earned through gameplay)
+    if (!this.carriages.some((c) => c.id === 'car_workshop')) {
+      this.carriages.push({
+        id: 'car_workshop',
+        name: 'Toa Xưởng Kỹ Thuật (Mara Gia Cố)',
+        type: 'Workshop',
+        maxHealth: 300,
+        currentHealth: 300,
+        baseWeight: 8.5,
+        powerConsumption: 25,
+        powerProduction: 0,
+        armorRating: 20,
+        installedUpgrades: [],
+        weaponSlots: 0,
+        armorSlots: 2,
+        utilitySlots: 3,
+        positionIndex: this.carriages.length,
+      });
+      this.chapter1.workshopCarriageEarned = true;
+      if (!this.completedObjectives.includes('ch1_workshop_earned')) {
+        this.completedObjectives.push('ch1_workshop_earned');
+      }
+      this.recalculateTrainStats();
+    }
+
+    this.chapter1.step = 'dock_outpost42';
+    this.chapter1.dialogueOpen = false;
+    this.chapter1.activeStoryModal = 'none';
+
+    soundManager.playHorn();
+    this.triggerStorySave('Chiêu mộ Mara Cole và Gắn Toa Xưởng Kỹ Thuật vào đoàn tàu');
+
+    this.addNotification({
+      title: 'ĐÃ NHẬN TOA TÀU MỚI: TOA XƯỞNG CƠ KHÍ!',
+      details: 'Mara Cole đã gắn toa xưởng vào đoàn tàu! Mở khóa bàn chế tạo nâng cấp giáp và tháp súng!',
+      type: 'craft',
+    });
+  }
+
+  public dockAtOutpost42() {
+    if (this.completedObjectives.includes('ch1_complete')) return;
+
+    this.trainStats.currentSpeed = 0;
+    this.trainStats.targetSpeed = 0;
+    this.trainStats.throttle = 0;
+    this.trainStats.state = 'Stationary';
+
+    this.chapter1.outpostDocked = true;
+    this.chapter1.step = 'chapter1_complete';
+    this.chapter1.dialogueOpen = true;
+    this.chapter1.activeStoryModal = 'chapter1_complete_modal';
+
+    if (!this.completedObjectives.includes('ch1_complete')) {
+      this.completedObjectives.push('ch1_complete');
+    }
+    this.storyDecisions['outpost42_secured'] = true;
+
+    // Outpost 42 Mission completion rewards
+    const scrapInv = this.inventory.find((i) => i.id === 'scrap');
+    if (scrapInv) scrapInv.quantity += 50;
+    const steelInv = this.inventory.find((i) => i.id === 'steel');
+    if (steelInv) steelInv.quantity += 20;
+    this.turret.currentAmmo = Math.min(this.turret.maxAmmo, this.turret.currentAmmo + 100);
+    this.trainStats.currentFuel = Math.min(this.trainStats.maxFuel, this.trainStats.currentFuel + 30);
+
+    soundManager.playHorn();
+    this.triggerCheckpointSave('Hoàn thành Chương I: The Last Departure - Cập Bến Tiền Đồn 42');
+
+    this.addNotification({
+      title: 'HOÀN THÀNH CHƯƠNG I: THE LAST DEPARTURE',
+      details: 'Cập bến Tiền Đồn 42 an toàn! Nhận +50 Phế Liệu, +20 Thép, +100 Đạn & +30L Dầu!',
+      type: 'station',
+    });
+  }
+
+  public completeChapter1() {
+    this.chapter1.dialogueOpen = false;
+    this.chapter1.activeStoryModal = 'none';
+    this.currentChapter = 'Chapter2';
+    this.trainStats.nextStationDistance = 16.0; // Distance to next hub (Continental Works)
+    this.triggerStorySave('Bắt đầu Chương II: Scrap and Steel - Tuyến Đường Sắt Đại Lục');
+    this.addNotification({
+      title: 'BẮT ĐẦU CHƯƠNG II: SCRAP AND STEEL',
+      details: 'Tiến vào Bãi Phế Liệu Đại Lục tìm kiếm Darius Thorne và đối đầu The Iron Warden',
+      type: 'station',
+    });
+  }
+
+  public closeStoryDialogue() {
+    if (this.prologue.isActive) {
+      this.prologue.dialogueOpen = false;
+    }
+    if (this.chapter1) {
+      this.chapter1.dialogueOpen = false;
+      this.chapter1.activeStoryModal = 'none';
+    }
   }
 
 
@@ -784,6 +1128,16 @@ export class GameEngine {
 
     // 5. Turret Auto Fire & Overheat (spec 18-20) with visibility debuff
     this.updateTurret(delta);
+
+    // 6. Loot Pickups lifetime
+    this.updateLootPickups(delta);
+
+    // 7. Check critical train hull failure
+    if (this.carriages[0] && this.carriages[0].currentHealth <= 0) {
+      this.gameState = 'GameOver';
+      this.defeatReason = 'train_destroyed';
+      soundManager.playAlarm();
+    }
   }
 
   public setWeather(weather: 'clear' | 'rain' | 'blizzard', triggerNotification = true) {
@@ -923,6 +1277,18 @@ export class GameEngine {
       }
     }
 
+    // Check if completely stranded with zero speed, zero fuel, and no spare fuel
+    if (ts.currentFuel <= 0 && ts.currentSpeed <= 0.1 && !this.godMode && !this.prologue.isActive) {
+      const hasFuelReserve =
+        this.inventory.some((i) => (i.id === 'fuel_can' || i.id === 'biofuel') && i.quantity > 0) ||
+        this.storage.some((i) => (i.id === 'fuel_can' || i.id === 'biofuel') && i.quantity > 0);
+      if (!hasFuelReserve) {
+        this.gameState = 'GameOver';
+        this.defeatReason = 'stranded';
+        soundManager.playAlarm();
+      }
+    }
+
     // Update audio engine pitch
     soundManager.updateEnginePitch(ts.currentSpeed / ts.maxSpeed);
 
@@ -950,7 +1316,9 @@ export class GameEngine {
       }
     } else if (!this.currentStation) {
       ts.nextStationDistance = Math.max(0, ts.nextStationDistance - kmTraveled);
-      if (ts.nextStationDistance <= 0.05 && ts.currentSpeed <= 25) {
+      if (this.currentChapter === 'Chapter1' && this.chapter1?.isActive) {
+        this.updateChapter1Story(kmTraveled);
+      } else if (ts.nextStationDistance <= 0.05 && ts.currentSpeed <= 25) {
         // Arrive at Station!
         this.arriveAtStation();
       }
@@ -976,9 +1344,16 @@ export class GameEngine {
         const excessSpeed = this.trainStats.currentSpeed > this.currentTrackHazard.maxSafeSpeed;
         if (excessSpeed && !this.godMode) {
           const dmg = this.currentTrackHazard.damageAmount;
-          this.carriages[0].currentHealth = Math.max(10, this.carriages[0].currentHealth - dmg);
+          this.carriages[0].currentHealth = Math.max(0, this.carriages[0].currentHealth - dmg);
           soundManager.playHitImpact();
           soundManager.playAlarm();
+
+          if (this.carriages[0].currentHealth <= 0) {
+            this.gameState = 'GameOver';
+            this.defeatReason = 'derailment';
+            return;
+          }
+
           this.addNotification({
             title: 'VA CHẠM ĐƯỜNG RAY!',
             details: `Vượt tốc độ an toàn (${Math.round(this.trainStats.currentSpeed)} > ${this.currentTrackHazard.maxSafeSpeed} km/h). Đầu máy chịu ${dmg} sát thương!`,
@@ -1208,6 +1583,7 @@ export class GameEngine {
     // Check game over
     if (p.health <= 0) {
       this.gameState = 'GameOver';
+      this.defeatReason = 'player_killed';
       soundManager.playAlarm();
     }
   }
@@ -1262,6 +1638,12 @@ export class GameEngine {
             const effectiveDamage = Math.max(2, e.damagePerHit * (1 - targetCar.armorRating / 100));
             targetCar.currentHealth = Math.max(0, targetCar.currentHealth - effectiveDamage);
             soundManager.playHitImpact();
+
+            if (this.carriages[0].currentHealth <= 0 || this.carriages.every((c) => c.currentHealth <= 0)) {
+              this.gameState = 'GameOver';
+              this.defeatReason = 'train_destroyed';
+              soundManager.playAlarm();
+            }
           }
         }
       }
@@ -1334,10 +1716,7 @@ export class GameEngine {
       e.health -= t.damage;
       soundManager.playHitImpact();
       if (e.health <= 0) {
-        this.enemies.splice(i, 1);
-        if (this.prologue.isActive) {
-          this.onRaiderDefeated();
-        }
+        this.onEnemyKilled(e);
       }
       break;
     }
@@ -1357,15 +1736,211 @@ export class GameEngine {
 
     enemy.health -= t.damage * (delta * t.fireRate);
     if (enemy.health <= 0) {
-      const idx = this.enemies.indexOf(enemy);
-      if (idx !== -1) {
-        this.enemies.splice(idx, 1);
-        soundManager.playHitImpact();
-        if (this.prologue.isActive) {
-          this.onRaiderDefeated();
-        }
+      this.onEnemyKilled(enemy);
+      soundManager.playHitImpact();
+    }
+  }
+
+  public onEnemyKilled(enemy: EnemyEntity) {
+    const idx = this.enemies.indexOf(enemy);
+    if (idx !== -1) {
+      this.enemies.splice(idx, 1);
+    }
+
+    // Spawn 1-2 real collectible resource pickups
+    const dropCount = 1 + (Math.random() > 0.4 ? 1 : 0);
+    for (let i = 0; i < dropCount; i++) {
+      const roll = Math.random();
+      let type: 'scrap' | 'ammo' | 'fuel' = 'scrap';
+      let name = 'Phế Liệu Sắt';
+      let quantity = 8 + Math.floor(Math.random() * 8); // 8-15 scrap
+
+      if (roll < 0.25) {
+        type = 'fuel';
+        name = 'Nhiên Liệu Biofuel (+15L)';
+        quantity = 15;
+      } else if (roll < 0.60) {
+        type = 'ammo';
+        name = 'Đạn 7.62mm (+40 viên)';
+        quantity = 40;
+      }
+
+      const offsetX = (Math.random() - 0.5) * 1.5;
+      const offsetZ = (Math.random() - 0.5) * 2.0;
+
+      // Constrain loot drop close to railway track corridor so it is fully collectable
+      const clampedX = Math.max(-1.1, Math.min(1.1, enemy.x * 0.2 + offsetX * 0.4));
+
+      this.lootPickups.push({
+        id: 'loot_' + Date.now() + '_' + Math.random().toString(36).substring(2, 7),
+        type,
+        name,
+        quantity,
+        x: clampedX,
+        y: 0.1,
+        z: enemy.z + offsetZ,
+        life: 60,
+        maxLife: 60,
+      });
+    }
+
+    if (this.prologue.isActive) {
+      this.onRaiderDefeated();
+    } else if (enemy.id === 'boss_ch1_raider_truck') {
+      this.onChapter1BossDefeated(enemy);
+    }
+
+    this.advanceTutorial('aiming');
+  }
+
+  public collectPickup(id: string): LootPickup | null {
+    const idx = this.lootPickups.findIndex((p) => p.id === id);
+    if (idx === -1) return null;
+
+    const item = this.lootPickups[idx];
+    this.lootPickups.splice(idx, 1);
+
+    if (item.type === 'scrap') {
+      const inv = this.inventory.find((i) => i.id === 'scrap');
+      if (inv) inv.quantity += item.quantity;
+      else {
+        this.inventory.push({
+          id: 'scrap',
+          name: 'Scrap Metal',
+          type: 'Material',
+          weight: 0.5,
+          quantity: item.quantity,
+          maxStack: 100,
+          description: 'Salvaged metal pieces.',
+          icon: 'box',
+        });
+      }
+      this.addNotification({
+        title: 'THU GOM PHẾ LIỆU',
+        details: `+${item.quantity} Phế Liệu Sắt đã cất vào kho đồ`,
+        type: 'loot',
+        items: [{ name: 'Scrap Metal', quantity: item.quantity, icon: 'box' }],
+      });
+    } else if (item.type === 'ammo') {
+      this.turret.currentAmmo = Math.min(this.turret.maxAmmo, this.turret.currentAmmo + item.quantity);
+      const inv = this.inventory.find((i) => i.id === 'ammo_762');
+      if (inv) inv.quantity += item.quantity;
+      this.addNotification({
+        title: 'TIẾP ĐẠN THÁP SÚNG',
+        details: `+${item.quantity} Đạn 7.62mm nạp vào súng`,
+        type: 'loot',
+        items: [{ name: '7.62mm Ammo', quantity: item.quantity, icon: 'crosshair' }],
+      });
+    } else if (item.type === 'fuel') {
+      this.trainStats.currentFuel = Math.min(this.trainStats.maxFuel, this.trainStats.currentFuel + item.quantity);
+      this.addNotification({
+        title: 'TIẾP NHIÊN LIỆU',
+        details: `+${item.quantity}L Nhiên Liệu đổ vào bình đầu máy`,
+        type: 'loot',
+        items: [{ name: 'Synthetic Fuel', quantity: item.quantity, icon: 'flame' }],
+      });
+    }
+
+    soundManager.playLootSound();
+    this.advanceTutorial('scavenging');
+    return item;
+  }
+
+  public updateLootPickups(delta: number) {
+    const scrollRate = (this.trainStats.currentSpeed * delta * 0.45);
+    for (let i = this.lootPickups.length - 1; i >= 0; i--) {
+      const p = this.lootPickups[i];
+      p.life -= delta;
+
+      // When train is moving, track loot scrolls down with ground
+      if (this.trainStats.currentSpeed > 0) {
+        p.z -= scrollRate;
+      }
+
+      // Cowcatcher / magnetic train salvage: auto-collect loot close to the moving train
+      if ((this.trainStats.currentSpeed > 0 || Math.abs(p.z) < 14) && Math.abs(p.x) < 3.8 && Math.abs(p.z) < 16) {
+        this.collectPickup(p.id);
+        continue;
+      }
+
+      if (p.life <= 0 || p.z < -45) {
+        this.lootPickups.splice(i, 1);
       }
     }
+  }
+
+  public advanceTutorial(stepId: TutorialStep['id']) {
+    const step = this.tutorialSteps.find((s) => s.id === stepId);
+    if (step && !step.completed) {
+      step.completed = true;
+      soundManager.playClick();
+      this.addNotification({
+        title: 'HƯỚNG DẪN HOÀN TẤT',
+        details: `Đã hoàn thành: ${step.title}`,
+        type: 'craft',
+      });
+    }
+  }
+
+  public repairCarriage(carriageId?: string): boolean {
+    const target = carriageId
+      ? this.carriages.find((c) => c.id === carriageId)
+      : this.carriages.find((c) => c.currentHealth < c.maxHealth) || this.carriages[0];
+
+    if (!target) return false;
+    if (target.currentHealth >= target.maxHealth) return false;
+
+    const scrapItem = this.inventory.find((i) => i.id === 'scrap');
+    if (!scrapItem || scrapItem.quantity < 10) {
+      this.addNotification({
+        title: 'THIẾU PHẾ LIỆU',
+        details: 'Cần ít nhất 10 Phế Liệu Sắt để hàn phục hồi thân tàu!',
+        type: 'warning',
+      });
+      return false;
+    }
+
+    scrapItem.quantity -= 10;
+    this.inventory = this.inventory.filter((i) => i.quantity > 0);
+    const healed = Math.min(50, target.maxHealth - target.currentHealth);
+    target.currentHealth += healed;
+    soundManager.playLootSound();
+    this.advanceTutorial('repairs');
+
+    this.addNotification({
+      title: 'HÀN PHỤC HỒI THÂN TÀU',
+      details: `Đã hàn phục hồi +${healed} HP cho ${target.name}`,
+      type: 'craft',
+    });
+    return true;
+  }
+
+  public craftTurretAmmo(): boolean {
+    const scrapItem = this.inventory.find((i) => i.id === 'scrap');
+    if (!scrapItem || scrapItem.quantity < 10) {
+      this.addNotification({
+        title: 'THIẾU PHẾ LIỆU',
+        details: 'Cần 10 Phế Liệu Sắt để đúc 50 viên đạn 7.62mm!',
+        type: 'warning',
+      });
+      return false;
+    }
+
+    scrapItem.quantity -= 10;
+    this.inventory = this.inventory.filter((i) => i.quantity > 0);
+    this.turret.currentAmmo = Math.min(this.turret.maxAmmo, this.turret.currentAmmo + 50);
+
+    const invAmmo = this.inventory.find((i) => i.id === 'ammo_762');
+    if (invAmmo) invAmmo.quantity += 50;
+
+    soundManager.playLootSound();
+    this.advanceTutorial('repairs');
+    this.addNotification({
+      title: 'ĐÚC ĐẠN THÀNH CÔNG',
+      details: '+50 viên đạn 7.62mm sẵn sàng chiến đấu',
+      type: 'craft',
+    });
+    return true;
   }
 
   public lootStationCrate(crateId: string): boolean {
@@ -1454,6 +2029,17 @@ export class GameEngine {
     const upgrade = this.availableUpgrades.find((u) => u.id === upgradeId);
     if (!upgrade) return false;
 
+    // Check if already installed to prevent duplicate purchases
+    if (upgrade.id === 'upg_steel_armor') {
+      const targetCar = this.carriages.find((c) => c.type !== 'Locomotive') || this.carriages[0];
+      if (targetCar && targetCar.installedUpgrades.includes(upgrade.name)) return false;
+    } else if (upgrade.id === 'upg_gatling_mk2') {
+      if (this.turret.name === 'Gatling Autocannon Mk2') return false;
+    } else if (upgrade.id === 'upg_generator_mk2' || upgrade.id === 'upg_fuel_injector') {
+      const loco = this.carriages.find((c) => c.type === 'Locomotive') || this.carriages[0];
+      if (loco && loco.installedUpgrades.includes(upgrade.name)) return false;
+    }
+
     // Check cost
     for (const cost of upgrade.cost) {
       const has = this.inventory.find((i) => i.id === cost.itemId);
@@ -1469,30 +2055,53 @@ export class GameEngine {
 
     // Apply upgrade effects
     if (upgrade.id === 'upg_steel_armor') {
-      const def = this.carriages.find((c) => c.type === 'Defense');
-      if (def) {
-        def.armorRating += upgrade.armorDelta || 25;
-        def.maxHealth += upgrade.healthDelta || 60;
-        def.currentHealth += upgrade.healthDelta || 60;
-        def.baseWeight += upgrade.weightDelta;
-        def.installedUpgrades.push(upgrade.name);
+      const targetCar = this.carriages.find((c) => c.type !== 'Locomotive') || this.carriages[0];
+      if (targetCar) {
+        targetCar.armorRating += upgrade.armorDelta || 25;
+        targetCar.maxHealth += upgrade.healthDelta || 60;
+        targetCar.currentHealth += upgrade.healthDelta || 60;
+        targetCar.baseWeight += upgrade.weightDelta;
+        if (!targetCar.installedUpgrades.includes(upgrade.name)) {
+          targetCar.installedUpgrades.push(upgrade.name);
+        }
       }
+      this.advanceTutorial('upgrades');
     } else if (upgrade.id === 'upg_gatling_mk2') {
-      this.turret.damage += upgrade.damageDelta || 4;
+      this.turret.damage += upgrade.damageDelta || 12;
       this.turret.fireRate = 12;
+      this.turret.maxAmmo += 80;
+      this.turret.currentAmmo = Math.min(this.turret.maxAmmo, this.turret.currentAmmo + 40);
       this.turret.powerConsumption += upgrade.powerDelta;
       this.turret.name = 'Gatling Autocannon Mk2';
+      this.advanceTutorial('upgrades');
     } else if (upgrade.id === 'upg_generator_mk2') {
-      const loco = this.carriages.find((c) => c.type === 'Locomotive');
+      const loco = this.carriages.find((c) => c.type === 'Locomotive') || this.carriages[0];
       if (loco) {
-        loco.powerProduction += 120; // up to 280W
+        loco.powerProduction += 120; // +120W
         loco.baseWeight += upgrade.weightDelta;
+        if (!loco.installedUpgrades.includes(upgrade.name)) {
+          loco.installedUpgrades.push(upgrade.name);
+        }
+      }
+      this.advanceTutorial('upgrades');
+    } else if (upgrade.id === 'upg_fuel_injector') {
+      this.trainStats.fuelConsumptionRate = Math.max(0.4, this.trainStats.fuelConsumptionRate * 0.7);
+      this.trainStats.maxFuel += 25;
+      this.trainStats.currentFuel = Math.min(this.trainStats.maxFuel, this.trainStats.currentFuel + 25);
+      const loco = this.carriages.find((c) => c.type === 'Locomotive') || this.carriages[0];
+      if (loco && !loco.installedUpgrades.includes(upgrade.name)) {
         loco.installedUpgrades.push(upgrade.name);
       }
+      this.advanceTutorial('upgrades');
     }
 
     this.recalculateTrainStats();
     soundManager.playLootSound();
+    this.addNotification({
+      title: 'NÂNG CẤP TOA TÀU THÀNH CÔNG',
+      details: `Đã trang bị ${upgrade.name}!`,
+      type: 'craft',
+    });
     return true;
   }
 

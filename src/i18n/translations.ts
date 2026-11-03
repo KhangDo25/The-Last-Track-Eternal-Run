@@ -172,8 +172,8 @@ export const TRANSLATIONS = {
     debugHint: 'Menu Gỡ Lỗi',
 
     // Interactable Names
-    interactThrottle: 'Bảng Điều Khiển Đầu Máy & Cần Ga (W/S)',
-    interactHorn: 'Kéo Còi Hơi Đầu Máy [H]',
+    interactThrottle: 'Bảng Điều Khiển Cần Ga Đầu Máy',
+    interactHorn: 'Còi Hơi Báo Hiệu',
     interactWorkbench: 'Bàn Chế Tạo & Nâng Cấp Toa Tàu',
     interactMountTurret: 'Vào Vị Trí Bắn Pháo Gatling',
     interactDismountTurret: 'Rời Khỏi Vị Trí Pháo',
@@ -415,8 +415,8 @@ export const TRANSLATIONS = {
     debugHint: 'Debug Menu',
 
     // Interactable Names
-    interactThrottle: 'Throttle & Cab Control Stand (W/S)',
-    interactHorn: 'Steam Whistle Horn [H]',
+    interactThrottle: 'Locomotive Throttle Controls',
+    interactHorn: 'Steam Whistle Horn',
     interactWorkbench: 'Workshop Crafting & Upgrade Bench',
     interactMountTurret: 'Mount Gatling Autocannon',
     interactDismountTurret: 'Dismount Turret',

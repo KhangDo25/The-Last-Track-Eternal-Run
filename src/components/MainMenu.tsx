@@ -37,6 +37,7 @@ interface MainMenuProps {
   onSetLanguage: (lang: Language) => void;
   onStartNewGame: (skipIntro?: boolean) => void;
   onContinueGame: () => void;
+  onResumeLoadedGame?: () => void;
   engine: GameEngine;
 }
 
@@ -47,6 +48,7 @@ export const MainMenu: React.FC<MainMenuProps> = ({
   onSetLanguage,
   onStartNewGame,
   onContinueGame,
+  onResumeLoadedGame,
   engine,
 }) => {
   const t = TRANSLATIONS[language];
@@ -454,8 +456,10 @@ export const MainMenu: React.FC<MainMenuProps> = ({
     };
 
     const handleResize = () => {
-      canvas.width = window.innerWidth;
-      canvas.height = window.innerHeight;
+      const w = canvas.parentElement?.clientWidth || window.innerWidth || 800;
+      const h = canvas.parentElement?.clientHeight || window.innerHeight || 600;
+      canvas.width = w;
+      canvas.height = h;
     };
     handleResize();
     window.addEventListener('resize', handleResize);
@@ -502,7 +506,7 @@ export const MainMenu: React.FC<MainMenuProps> = ({
   };
 
   return (
-    <div className={`relative w-full h-full overflow-hidden font-mono select-none text-zinc-100 ${crtFilter ? 'crt-scanlines' : ''}`}>
+    <div className={`absolute inset-0 overflow-hidden font-mono select-none text-zinc-100 z-30 ${crtFilter ? 'crt-scanlines' : ''}`}>
       {/* 2D Pixel-Art Background Canvas */}
       <canvas ref={canvasRef} className="absolute inset-0 w-full h-full block" />
 
@@ -877,7 +881,11 @@ export const MainMenu: React.FC<MainMenuProps> = ({
           }}
           onLoaded={() => {
             setActiveSubModal('none');
-            onContinueGame();
+            if (onResumeLoadedGame) {
+              onResumeLoadedGame();
+            } else {
+              onContinueGame();
+            }
           }}
           language={language}
         />

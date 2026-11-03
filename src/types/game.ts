@@ -1,5 +1,7 @@
 export type GameState = 'MainMenu' | 'Loading' | 'Playing' | 'Paused' | 'Station' | 'GameOver';
 
+export type DefeatReason = 'train_destroyed' | 'player_killed' | 'derailment' | 'stranded';
+
 export type TrainState = 'Moving' | 'Braking' | 'Stationary' | 'Departing' | 'EmergencyStop' | 'Disabled';
 
 export type CarriageType = 'Locomotive' | 'Workshop' | 'Defense' | 'Storage' | 'Living' | 'Power';
@@ -202,6 +204,33 @@ export interface PrologueState {
   };
 }
 
+export type Chapter1Step =
+  | 'not_started'
+  | 'outskirts_travel'
+  | 'log1_discovered'
+  | 'mara_distress'
+  | 'roadblock_boss'
+  | 'mara_rescue_dialogue'
+  | 'mara_decision'
+  | 'dock_outpost42'
+  | 'chapter1_complete';
+
+export interface Chapter1State {
+  isActive: boolean;
+  step: Chapter1Step;
+  log1Discovered: boolean;
+  maraDistressHeard: boolean;
+  roadblockSpawned: boolean;
+  roadblockDefeated: boolean;
+  maraRecruited: boolean;
+  maraDecisionMade: boolean;
+  maraDecisionChoice?: 'share_fuel' | 'conserve_fuel';
+  workshopCarriageEarned: boolean;
+  outpostDocked: boolean;
+  dialogueOpen: boolean;
+  activeStoryModal?: 'none' | 'log1_modal' | 'mara_distress_modal' | 'mara_rescue_modal' | 'chapter1_complete_modal';
+}
+
 export type ChapterId =
   | 'Prologue'
   | 'Chapter1'
@@ -301,6 +330,7 @@ export interface FullSaveData {
   turret: TurretState;
   currentWeather: 'clear' | 'rain' | 'blizzard';
   prologue: PrologueState;
+  chapter1?: Chapter1State;
   completedObjectives: string[];
   storyDecisions: Record<string, string | boolean>;
   resources: {

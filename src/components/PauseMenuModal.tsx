@@ -16,6 +16,7 @@ import {
   Train,
   Clock,
   Sparkles,
+  BookOpen,
 } from 'lucide-react';
 import { SaveManager } from '../game/saveManager';
 
@@ -25,6 +26,7 @@ interface PauseMenuModalProps {
   onOpenSave: () => void;
   onOpenLoad: () => void;
   onOpenSettings: () => void;
+  onOpenStoryLog?: () => void;
   onReturnToMainMenu: (saveFirst: boolean) => void;
   language: Language;
 }
@@ -35,6 +37,7 @@ export const PauseMenuModal: React.FC<PauseMenuModalProps> = ({
   onOpenSave,
   onOpenLoad,
   onOpenSettings,
+  onOpenStoryLog,
   onReturnToMainMenu,
   language,
 }) => {
@@ -178,6 +181,20 @@ export const PauseMenuModal: React.FC<PauseMenuModalProps> = ({
             <FolderOpen className="w-4 h-4 text-emerald-400" />
             <span>{language === 'vi' ? 'NẠP BẢN LƯU' : 'LOAD CAMPAIGN'}</span>
           </button>
+
+          {/* STORY DOSSIER */}
+          {onOpenStoryLog && (
+            <button
+              onClick={() => {
+                soundManager.playClick();
+                onOpenStoryLog();
+              }}
+              className="w-full py-2.5 bg-zinc-950 hover:bg-zinc-800 border border-zinc-800 hover:border-zinc-700 text-zinc-200 font-bold text-xs uppercase tracking-wide rounded-2xl transition-all flex items-center justify-center gap-2 cursor-pointer"
+            >
+              <BookOpen className="w-4 h-4 text-purple-400" />
+              <span>{language === 'vi' ? 'NHẬT KÝ CHIẾN DỊCH' : 'CAMPAIGN DOSSIER'}</span>
+            </button>
+          )}
 
           {/* 4. SETTINGS */}
           <button
